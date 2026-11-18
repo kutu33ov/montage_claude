@@ -4,9 +4,25 @@ The owner records Russian-language talking-head videos (topic: AI, social networ
 sends a Google Drive link, and expects finished vertical shorts + titles + covers.
 Talk to the owner in Russian, casually, short messages.
 
+## ALWAYS ask before cutting (every new video)
+After `prep.py` (so you can already propose concrete moments), and BEFORE rendering anything, ask the owner
+these six questions — use AskUserQuestion (max 4 per call → two calls), give concrete options with your
+recommendation first, based on the transcript:
+1. **Длина** — how many seconds per short (e.g. 30 / 45 / 60 / as the thought needs) and how many shorts.
+2. **Ретушь** — where: `nose_tip`, `nose`, `forehead`, `cheek_left`, `cheek_right`, `between_brows` (scripts/skin.py
+   ZONES) + general skin smoothing strength (0 = off, 0.5 = light default). Offer a 9:16 before/after screenshot.
+3. **Графики** — insert charts? Propose the exact numbers/claims from the speech for each card (never invent data,
+   show the source the owner named).
+4. **Картинки** — insert images? Which ones (owner sends them or names them; nothing downloaded from random sites).
+5. **Бесконечное видео** — make it loop endlessly? If yes, pick an ending that flows into the opening
+   (e.g. the last phrase leads into the first sentence) and set `"loop": true`.
+6. **Переходы** — transition effects or plain cuts? (He dislikes glitch and shake; offer whip / zoom / flash / none.)
+Then render with the answers. If he already answered some of these in his message, don't ask them again.
+
 ## Setup in a fresh session
-1. `bash setup.sh` (pip deps, Inter fonts, ~1.6 GB whisper model into `./models`).
-2. Network hosts needed (already allowed in the Default environment):
+1. `bash setup.sh` (pip deps, Inter fonts, ~1.6 GB whisper model into `./models`). In the `montage_claude`
+   cloud environment this runs automatically at session start.
+2. Network hosts needed (already allowed in the `montage_claude` and Default environments):
    `huggingface.co`, `cdn-lfs.hf.co`, `us.aws.cdn.hf.co`, `cas-bridge.xethub.hf.co`, `cas-server.xethub.hf.co`,
    `drive.google.com`, `drive.usercontent.google.com`.
 3. The Google Drive connector can't list/write files (missing permission) → download by link
@@ -43,6 +59,11 @@ Per short in config.json (anchor by `"word"`, source time `"at"` or output time 
   `assets/music` first, the synthetic `placeholder_lofi_88bpm.wav` only if there is none. Ducked under the voice.
   The owner will write his own music — always prefer his tracks.
 - `lut` — `warm` | `cool` | `contrast` | `film` (`assets/luts`, regenerate with `scripts/gen_luts.py`).
+- `retouch` — `{"skin": 0.5, "zones": ["nose_tip", "cheek_left"]}` (global or per short; covers take it too).
+- `loop` — `true`: endless video. Last segment uses the first segment's zoom, the last 0.35 s dissolve into the
+  first frame, music has no audible fade, hook title hidden (`"hook_in_loop": true` to keep it). The CONTENT
+  must loop too: end on a phrase that leads into the opening line (e.g. end «…ролик, который тоже начался
+  с вопроса, рассчитанного на то, чтобы тебя зацепить» → start «Ты заметил, что интернет…»).
 - `fx.progress_bar`, `fx.watermark` ("@nick") — off by default.
 Taste: 1–3 accents per short (one emphasis, one insert/glitch, a ding on the punchline). Don't put a sound
 on every cut. All bundled sounds/music/LUTs are synthesised by `gen_sfx.py` / `gen_luts.py` — royalty-free.
@@ -61,8 +82,8 @@ on every cut. All bundled sounds/music/LUTs are synthesised by `gen_sfx.py` / `g
   Prepositions/short conjunctions (в, к, на, с, по, и, а, не…) are NEVER the last word of a caption — they move
   to the next caption with their word; particles (же, ли, бы) stay with the previous word. Lines longer than
   18 chars shrink the font instead of wrapping. (Implemented in make_short.py — keep it that way.)
-- Retouch: light skin smoothing (strength 0.5) + redness fix ONLY on the nose tip, matched to the
-  surrounding skin tone (it must never look pale). The owner dislikes heavy/plastic smoothing.
+- Retouch: light skin smoothing (strength 0.5) + redness fix only in the zones he names (default: nose tip),
+  matched to the surrounding skin tone (it must never look pale). The owner dislikes heavy/plastic smoothing.
 - Loudness −14 LUFS.
 **Covers (1080×1920)**
 - Plain natural frame (with the same retouch) + title. NO colour grading, NO purple look, NO cut-out/outline,

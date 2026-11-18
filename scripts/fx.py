@@ -249,8 +249,10 @@ class FX:
             if mf:
                 inputs += ['-stream_loop', '-1', '-i', mf]
                 vol = mus.get('volume_db', -20); fo = mus.get('fade_out', 1.5)
+                fades = (f'afade=t=in:d=0.8,afade=t=out:st={max(0, self.total - fo):.3f}:d={fo},' if not getattr(self, 'loop', False)
+                         else 'afade=t=in:d=0.08,afade=t=out:st=' + f'{max(0, self.total - 0.08):.3f}:d=0.08,')   # loop: no audible fade
                 fl.append(f'[{idx}:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=0:{self.total:.3f},asetpts=PTS-STARTPTS,'
-                          f'afade=t=in:d=0.8,afade=t=out:st={max(0, self.total - fo):.3f}:d={fo},volume={vol}dB[m0]')
+                          f'{fades}volume={vol}dB[m0]')
                 if mus.get('duck', True):
                     fl.append('[m0][vsc]sidechaincompress=threshold=0.02:ratio=6:attack=15:release=400:makeup=1[m]')
                     used_sc = True

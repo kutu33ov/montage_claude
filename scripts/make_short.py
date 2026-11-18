@@ -83,6 +83,9 @@ for i, (s, e) in enumerate(keeps):
     # punch-in toggles on jump cuts (skip after very short bits to avoid flicker)
     if i > 0 and keeps[i-1][1] - keeps[i-1][0] > 0.8: zoomed = not zoomed
     plan.append((s, e, ZOOM if zoomed else 1.0))
+LOOP = sh.get('loop', G.get('loop', False))
+if LOOP and plan:   # endless video: the last frame must look like the first one
+    plan[-1] = (plan[-1][0], plan[-1][1], plan[0][2])
 
 aparts, labels = [], []
 for i, (s, e, z) in enumerate(plan):
@@ -133,6 +136,7 @@ for gi, g in enumerate(groups):
     fs = f"{{\\fs{int(78 * 18 / len(txt))}}}" if len(txt) > 18 else ''   # long line: shrink instead of wrapping
     ev.append(f"Dialogue: 0,{ts(a)},{ts(b)},Cap,,0,0,0,,{fs}{txt}")
 hook = sh.get('hook')
+if LOOP and not sh.get('hook_in_loop', False): hook = None   # a title popping up on every loop gives the seam away
 if hook:
     ev.append(f"Dialogue: 1,{ts(0)},{ts(min(3.2, total))},Hook,,0,0,0,,{{\\fad(0,250)}}{hook}")
 
@@ -162,10 +166,11 @@ _s = OUT_H / SRC_H   # face geometry in output pixels (at zoom 1.0)
 face_out = (int((cy - 0.78 * fw) * _s), int((cy + 0.68 * fw) * _s), int((cy - 0.24 * fw) * _s))  # head top, chin, brows
 cap_top = OUT_H - G.get('cap_margin', 560) - 90
 fx = FX(G, sh, words, src2out, total, parts, FPS, face_out, cap_top)
+fx.loop = sh.get('loop', G.get('loop', False))
 
 def render():
     import cv2
-    from skin import detect_face, smooth_skin, fix_nose
+    from skin import detect_face, retouch
     cv2.setNumThreads(2)
     wd = G['workdir']; sid = sh['id']
     afg = f"{wd}/{sid}.afilter"; open(afg, 'w').write(";\n".join(aparts))
@@ -181,6 +186,8 @@ def render():
         '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', '-shortest', out], stdin=subprocess.PIPE)
     fsz = cw * SRC_H * 3
     acc, box, written = 0.0, None, 0
+    first, XF = None, 0.35
+    n_total = round(total * FPS)
     for s, e, z in plan:
         acc += e - s
         n = round(acc * FPS) - written
@@ -196,11 +203,15 @@ def render():
                     if k % 8 == 0 or box is None:
                         nb = detect_face(fr)
                         if nb is not None: box = nb
-                    fr = smooth_skin(fr, box, **G.get('skin_params', {}))
-                    if G.get('nose_fix', True): fr = fix_nose(fr, box)
+                    fr = retouch(fr, box, sh.get('retouch', G.get('retouch')))
                 last = cv2.resize(fr[zy:zy + zh, zx:zx + zw], (OUT_W, OUT_H), interpolation=cv2.INTER_CUBIC)
             if last is not None:
-                enc.stdin.write(fx.apply(last.copy(), written / FPS).tobytes())
+                outf = fx.apply(last.copy(), written / FPS)
+                if first is None: first = outf.copy()
+                if LOOP and written >= n_total - XF * FPS:   # dissolve into the first frame -> seamless loop
+                    p = (written - (n_total - XF * FPS)) / (XF * FPS)
+                    outf = cv2.addWeighted(outf, 1 - p, first, p, 0)
+                enc.stdin.write(outf.tobytes())
                 written += 1
         rd.stdout.close(); rd.wait()
     enc.stdin.close(); enc.wait()

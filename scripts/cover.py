@@ -5,9 +5,10 @@ import json, subprocess, sys, os, random
 import numpy as np, cv2
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from skin import detect_face, smooth_skin, fix_nose
+from skin import detect_face, retouch
 
 W, H = 1080, 1920
+RETOUCH = None   # set from cover config: {"skin": 0.5, "zones": [...]}
 FONT = '/usr/share/fonts/opentype/inter/Inter-SemiBold.otf'
 
 def grab(src, t, cx, zoom, face_y=0.33):
@@ -17,7 +18,7 @@ def grab(src, t, cx, zoom, face_y=0.33):
     im = cv2.imdecode(np.frombuffer(raw, np.uint8), 1)
     b = detect_face(im)
     if b is None: b = np.array([164, 260, 280, 280])
-    im = fix_nose(smooth_skin(im, b, 0.5, 1, 0.6), b)
+    im = retouch(im, b, RETOUCH)
     cw, ch = int(608 / zoom), int(1080 / zoom)
     fx, fy = b[0] + b[2] / 2, b[1] + b[3] / 2
     x0 = int(min(max(fx - cw / 2, 0), 608 - cw)); y0 = int(min(max(fy - ch * face_y, 0), 1080 - ch))
@@ -129,4 +130,5 @@ def make(c):
 
 if __name__ == '__main__':
     for c in json.load(open(sys.argv[1])):
+        RETOUCH = c.get('retouch')
         make(c)

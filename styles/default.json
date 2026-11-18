@@ -1,13 +1,6 @@
 {
  "global": {
   "font": "Inter",
-  "skin": true,
-  "skin_params": {
-   "strength": 0.5,
-   "passes": 1,
-   "texture": 0.6
-  },
-  "nose_fix": true,
   "zoom": 1.12,
   "cap_margin": 560,
   "fixes": {
@@ -29,7 +22,14 @@
    "progress_bar": false,
    "watermark": null
   },
-  "lut": null
+  "lut": null,
+  "retouch": {
+   "skin": 0.5,
+   "zones": [
+    "nose_tip"
+   ]
+  },
+  "loop": false
  },
  "cover": {
   "grade": false,

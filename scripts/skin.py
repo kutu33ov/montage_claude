@@ -37,12 +37,26 @@ def smooth_skin(img, box, strength=0.5, passes=1, texture=0.6):
     return img
 
 
+# retouch zones, relative to the Haar face box: (centre x, centre y, half-width, half-height)
+ZONES = {
+    'nose_tip':    (0.53, 0.575, 0.115, 0.085),
+    'nose':        (0.52, 0.50, 0.12, 0.17),
+    'forehead':    (0.50, 0.13, 0.30, 0.11),
+    'cheek_left':  (0.28, 0.60, 0.12, 0.12),   # left as seen by the viewer
+    'cheek_right': (0.74, 0.60, 0.12, 0.12),
+    'between_brows': (0.52, 0.33, 0.08, 0.06),
+}
+
 def fix_nose(img, box, red=0.85, smooth=0.9):
-    """Strong local retouch on the nose: pull redness to the face's skin tone and smooth hard."""
+    return fix_zone(img, box, 'nose_tip', red, smooth)
+
+def fix_zone(img, box, zone='nose_tip', red=0.85, smooth=0.9):
+    """Strong local retouch in one zone: pull excess redness to the surrounding skin tone and smooth hard."""
     if box is None: return img
     H, W = img.shape[:2]
     x, y, w, h = box
-    ncx, ncy, ax, ay = x + 0.53 * w, y + 0.575 * h, 0.115 * w, 0.085 * h
+    zx, zy, zw, zh = ZONES[zone] if isinstance(zone, str) else zone
+    ncx, ncy, ax, ay = x + zx * w, y + zy * h, zw * w, zh * h
     x0, y0 = int(max(ncx - ax * 1.4, 0)), int(max(ncy - ay * 1.4, 0))
     x1, y1 = int(min(ncx + ax * 1.4, W)), int(min(ncy + ay * 1.4, H))
     roi = img[y0:y1, x0:x1]
@@ -74,4 +88,14 @@ def fix_nose(img, box, red=0.85, smooth=0.9):
     ycc[..., 0] = Y * (1 - ms) + Ys * ms
     out = cv2.cvtColor(np.clip(ycc, 0, 255).astype(np.uint8), cv2.COLOR_YCrCb2BGR)
     img[y0:y1, x0:x1] = out
+    return img
+
+
+def retouch(img, box, cfg=None):
+    """cfg: {"skin": 0.5 (0 = off), "zones": ["nose_tip", "forehead", ...]} — what the owner asked for."""
+    cfg = cfg or {}
+    k = cfg.get('skin', 0.5)
+    if k: img = smooth_skin(img, box, k, 1, 0.6)
+    for z in cfg.get('zones', ['nose_tip']):
+        img = fix_zone(img, box, z)
     return img
