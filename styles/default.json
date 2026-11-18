@@ -25,12 +25,12 @@
   "lut": null,
   "retouch": {
    "skin": 0.5,
-   "zones": [
-    "nose_tip"
-   ],
+   "nose_red": true,
+   "warmth": 2.5,
    "spots": [
     "nose_wide"
-   ]
+   ],
+   "zones": []
   },
   "loop": false
  },

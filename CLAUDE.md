@@ -59,10 +59,13 @@ Per short in config.json (anchor by `"word"`, source time `"at"` or output time 
   `assets/music` first, the synthetic `placeholder_lofi_88bpm.wav` only if there is none. Ducked under the voice.
   The owner will write his own music — always prefer his tracks.
 - `lut` — `warm` | `cool` | `contrast` | `film` (`assets/luts`, regenerate with `scripts/gen_luts.py`).
-- `retouch` — `{"skin": 0.5, "zones": ["nose_tip"], "spots": ["nose_wide"]}` (global or per short; covers take it too).
-  `zones` = redness tone fix, `spots` = removes small red dots (the owner noticed a red dot on the nose tip
-  that the tone fix alone left, and it showed again on fast head turns — keep `spots: ["nose_wide"]` on by
-  default; the face is re-detected EVERY frame for this reason).
+- `retouch` — `{"skin": 0.5, "nose_red": true, "warmth": 2.5, "spots": ["nose_wide"], "zones": []}`
+  (global or per short; covers take it too). Video uses `skin.Retoucher`: face tracked EVERY frame (Haar +
+  optical-flow fallback, false detections of the wrong size rejected, jumps confirmed over 3 frames) so the
+  retouch never drops out on fast head moves; the whole nose above the lips is pulled to the CHEEK tone
+  (+warmth so it's never pale); small red dots removed (`spots`). Extra redness zones (`forehead`,
+  `cheek_left`…) via `zones`. The owner checks the nose tip frame by frame — verify with a nose contact
+  sheet over the whole short (uniform frames + fastest-motion frames) before sending.
 - `loop` — `true`: endless video. Last segment uses the first segment's zoom, the last 0.35 s dissolve into the
   first frame, music has no audible fade, hook title hidden (`"hook_in_loop": true` to keep it). The CONTENT
   must loop too: end on a phrase that leads into the opening line (e.g. end «…ролик, который тоже начался

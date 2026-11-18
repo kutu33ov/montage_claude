@@ -170,7 +170,8 @@ fx.loop = sh.get('loop', G.get('loop', False))
 
 def render():
     import cv2
-    from skin import detect_face, retouch
+    from skin import Retoucher
+    rt = Retoucher(sh.get('retouch', G.get('retouch')), size=float(np.median(f[:, 3])))   # expected face width from faces.json
     cv2.setNumThreads(2)
     wd = G['workdir']; sid = sh['id']
     afg = f"{wd}/{sid}.afilter"; open(afg, 'w').write(";\n".join(aparts))
@@ -194,16 +195,14 @@ def render():
         rd = subprocess.Popen(['ffmpeg', '-v', 'error', '-ss', f'{s:.3f}', '-t', f'{e - s:.3f}', '-i', SRC, '-an', '-frames:v', str(n),
             '-vf', f'fps={FPS},crop={cw}:{SRC_H}:{bx}:0', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-'], stdout=subprocess.PIPE)
         zx, zy, zw, zh = zoom_box(z)
+        rt.pgray = None   # no optical flow across a jump cut
         last = None
         for k in range(n):
             buf = rd.stdout.read(fsz)
             if len(buf) == fsz:
                 fr = np.frombuffer(buf, np.uint8).reshape(SRC_H, cw, 3).copy()
                 if G.get('skin', True):
-                    if True:   # every frame: on fast head moves a stale box misses the nose
-                        nb = detect_face(fr)
-                        if nb is not None: box = nb
-                    fr = retouch(fr, box, sh.get('retouch', G.get('retouch')))
+                    fr = rt(fr)          # tracked every frame, corrections fade out slowly (skin.Retoucher)
                 last = cv2.resize(fr[zy:zy + zh, zx:zx + zw], (OUT_W, OUT_H), interpolation=cv2.INTER_CUBIC)
             if last is not None:
                 outf = fx.apply(last.copy(), written / FPS)

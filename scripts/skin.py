@@ -138,3 +138,120 @@ def fix_spots(img, box, zone='nose', strength=1.0):
     ycc[..., 0] = Y * (1 - 0.7 * m) + np.maximum(Y, base_y) * 0.7 * m   # spots are a bit darker: lift them
     img[y0:y1, x0:x1] = cv2.cvtColor(np.clip(ycc, 0, 255).astype(np.uint8), cv2.COLOR_YCrCb2BGR)
     return img
+
+
+def cheek_ref(img, box):
+    """median skin chroma of both cheeks — the tone a healthy nose should have"""
+    x, y, w, h = box; vals = []
+    for cx in (0.27, 0.77):
+        X0, Y0 = int(x + (cx - 0.07) * w), int(y + 0.55 * h); X1, Y1 = int(x + (cx + 0.07) * w), int(y + 0.68 * h)
+        X0, Y0 = max(X0, 0), max(Y0, 0)
+        p = img[Y0:Y1, X0:X1]
+        if p.size == 0: continue
+        ycc = cv2.cvtColor(p, cv2.COLOR_BGR2YCrCb).reshape(-1, 3).astype(np.float32)
+        ycc = ycc[(ycc[:, 0] > 60) & (ycc[:, 1] > 130) & (ycc[:, 1] < 185)]
+        if len(ycc) > 20: vals.append(np.median(ycc[:, 1:], 0))
+    return np.mean(vals, 0) if vals else None
+
+def fix_nose_red(img, box, ref, warmth=2.5, strength=1.0):
+    """Pull every pixel of the nose area that is redder than the cheeks (+warmth) down to the cheek tone.
+    Works on the whole nose above the lips, so it doesn't depend on exactly where the tip is."""
+    if box is None or ref is None: return img
+    H, W = img.shape[:2]; x, y, w, h = box
+    zx, zy, zw, zh = ZONES['nose_wide']
+    cx, cy, ax, ay = x + zx * w, y + zy * h, zw * w, zh * h
+    X0, Y0, X1, Y1 = int(max(cx - ax * 1.2, 0)), int(max(cy - ay * 1.2, 0)), int(min(cx + ax * 1.2, W)), int(min(cy + ay * 1.2, H))
+    roi = img[Y0:Y1, X0:X1]
+    if roi.shape[0] < 10 or roi.shape[1] < 10: return img
+    ell = np.zeros(roi.shape[:2], np.float32)
+    cv2.ellipse(ell, (int(cx - X0), int(cy - Y0)), (int(ax), int(ay)), 0, 0, 360, 1.0, -1)
+    lip = int(y + 0.70 * h) - Y0                       # never touch the lips
+    if lip < ell.shape[0]: ell[max(lip, 0):] = 0
+    ell = cv2.GaussianBlur(ell, (0, 0), max(ax, ay) * 0.12)
+    ycc = cv2.cvtColor(roi, cv2.COLOR_BGR2YCrCb).astype(np.float32)
+    Y, Cr, Cb = ycc[..., 0], ycc[..., 1], ycc[..., 2]
+    sk = ((Y > 55) & (Cr > 130) & (Cr < 190)).astype(np.float32)
+    tcr, tcb = ref[0] + warmth, ref[1]
+    ex = Cr - tcr
+    m = np.clip(ex / 5.0, 0, 1) * sk * ell
+    m = cv2.GaussianBlur(m, (0, 0), max(1.5, w * 0.01)) * strength
+    ycc[..., 1] = Cr - m * np.clip(ex, 0, None)
+    ycc[..., 2] = Cb + m * np.clip(tcb - Cb, 0, None) * 0.6
+    img[Y0:Y1, X0:X1] = cv2.cvtColor(np.clip(ycc, 0, 255).astype(np.uint8), cv2.COLOR_YCrCb2BGR)
+    return img
+
+
+class Retoucher:
+    """Temporally stable retouch for video: face box detected every frame and smoothed (EMA); if detection
+    fails the last box is held (no on/off flicker on fast moves); the cheek reference tone is smoothed over
+    time; the nose is pulled to the cheek tone every frame (whole nose above the lips) + small dots removed."""
+
+    def __init__(self, cfg=None, ema=0.6, ref_ema=0.1, size=None):
+        self.cfg = cfg or {}
+        self.ema, self.ref_ema = ema, ref_ema
+        self.box = None; self.ref = None; self.lost = 0; self.pgray = None
+        self.size = size; self.pending = None; self.pend_box = None
+
+    def flow_shift(self, gray):
+        """median optical-flow displacement of feature points inside the last box (prev -> current frame)"""
+        if self.pgray is None or self.box is None: return None
+        x, y, w, h = self.box
+        mask = np.zeros_like(self.pgray)
+        mask[int(max(y, 0)):int(y + h), int(max(x, 0)):int(x + w)] = 255
+        pts = cv2.goodFeaturesToTrack(self.pgray, 80, 0.01, 6, mask=mask)
+        if pts is None or len(pts) < 6: return None
+        nxt, st, _ = cv2.calcOpticalFlowPyrLK(self.pgray, gray, pts, None, winSize=(21, 21), maxLevel=3)
+        ok = st.ravel() == 1
+        if ok.sum() < 6: return None
+        d = (nxt[ok] - pts[ok]).reshape(-1, 2)
+        return np.median(d, 0)
+
+    def track(self, img):
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        b = detect_face(img)
+        sh = self.flow_shift(gray)
+        if b is not None and self.size is not None and not 0.72 < b[2] / self.size < 1.38:
+            b = None                                  # false detection (wrong size) — ignore it
+        if b is not None and self.box is not None and np.abs(np.asarray(b[:2]) - self.box[:2]).max() > b[2] * 0.6:
+            # big jump: accept only if it repeats for 3 frames (real cut / fast move), else treat as noise
+            self.pending = self.pending + 1 if self.pending is not None and np.abs(np.asarray(b[:2]) - self.pend_box[:2]).max() < b[2] * 0.3 else 1
+            self.pend_box = np.asarray(b, np.float64)
+            if self.pending < 3: b = None
+        else:
+            self.pending = None
+        if b is None:
+            # frontal detector lost the face (head turn, motion blur): follow it by optical flow
+            if self.box is not None and sh is not None:
+                self.box = self.box + np.array([sh[0], sh[1], 0, 0])
+                self.lost += 1
+            elif self.box is not None:
+                self.lost += 1
+            if self.lost > 90: self.box = None
+            self.pgray = gray
+            return self.box
+        self.lost = 0
+        b = np.asarray(b, np.float64)
+        self.size = b[2] if self.size is None else self.size * 0.9 + b[2] * 0.1
+        if self.box is None or np.abs(b[:2] - self.box[:2]).max() > b[2] * 0.6:
+            self.box = b; self.pending = None
+        else:
+            pred = self.box + (np.array([sh[0], sh[1], 0, 0]) if sh is not None else 0)
+            self.box = pred * (1 - self.ema) + b * self.ema
+        self.pgray = gray
+        return self.box
+
+    def __call__(self, img):
+        box = self.track(img)
+        if box is None: return img
+        k = self.cfg.get('skin', 0.5)
+        out = smooth_skin(img, box, k, 1, 0.6) if k else img.copy()
+        r = cheek_ref(out, box)
+        if r is not None:
+            self.ref = r if self.ref is None else self.ref * (1 - self.ref_ema) + r * self.ref_ema
+        if self.cfg.get('nose_red', True):
+            out = fix_nose_red(out, box, self.ref, self.cfg.get('warmth', 2.5))
+        for z in self.cfg.get('zones', []):
+            if z != 'nose_tip': out = fix_zone(out, box, z)
+        for z in self.cfg.get('spots', ['nose_wide']):
+            out = fix_spots(out, box, z, strength=1.2)
+        return out
