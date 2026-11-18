@@ -59,7 +59,9 @@ Per short in config.json (anchor by `"word"`, source time `"at"` or output time 
   `assets/music` first, the synthetic `placeholder_lofi_88bpm.wav` only if there is none. Ducked under the voice.
   The owner will write his own music — always prefer his tracks.
 - `lut` — `warm` | `cool` | `contrast` | `film` (`assets/luts`, regenerate with `scripts/gen_luts.py`).
-- `retouch` — `{"skin": 0.5, "zones": ["nose_tip", "cheek_left"]}` (global or per short; covers take it too).
+- `retouch` — `{"skin": 0.5, "zones": ["nose_tip"], "spots": ["nose"]}` (global or per short; covers take it too).
+  `zones` = redness tone fix, `spots` = removes small red dots (the owner noticed a red dot on the nose tip
+  that the tone fix alone left — keep `spots: ["nose"]` on by default).
 - `loop` — `true`: endless video. Last segment uses the first segment's zoom, the last 0.35 s dissolve into the
   first frame, music has no audible fade, hook title hidden (`"hook_in_loop": true` to keep it). The CONTENT
   must loop too: end on a phrase that leads into the opening line (e.g. end «…ролик, который тоже начался

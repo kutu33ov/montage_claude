@@ -27,6 +27,9 @@
    "skin": 0.5,
    "zones": [
     "nose_tip"
+   ],
+   "spots": [
+    "nose"
    ]
   },
   "loop": false

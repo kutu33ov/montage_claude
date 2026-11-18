@@ -92,10 +92,47 @@ def fix_zone(img, box, zone='nose_tip', red=0.85, smooth=0.9):
 
 
 def retouch(img, box, cfg=None):
-    """cfg: {"skin": 0.5 (0 = off), "zones": ["nose_tip", "forehead", ...]} — what the owner asked for."""
+    """cfg: {"skin": 0.5 (0 = off), "zones": ["nose_tip", ...] (redness tone fix),
+             "spots": ["nose", ...] (remove small red dots)} — what the owner asked for."""
     cfg = cfg or {}
     k = cfg.get('skin', 0.5)
     if k: img = smooth_skin(img, box, k, 1, 0.6)
     for z in cfg.get('zones', ['nose_tip']):
         img = fix_zone(img, box, z)
+    for z in cfg.get('spots', ['nose']):             # small red dots, after the tone fix
+        img = fix_spots(img, box, z)
+    return img
+
+
+def fix_spots(img, box, zone='nose', strength=1.0):
+    """Remove small red dots (pimples) inside a zone: pixels clearly redder than their immediate
+    surroundings get the surroundings' colour and a softened luminance. Keeps the overall tone."""
+    if box is None: return img
+    H, W = img.shape[:2]
+    x, y, w, h = box
+    zx, zy, zw, zh = ZONES[zone] if isinstance(zone, str) else zone
+    ncx, ncy, ax, ay = x + zx * w, y + zy * h, zw * w * 1.15, zh * h * 1.15
+    x0, y0 = int(max(ncx - ax * 1.3, 0)), int(max(ncy - ay * 1.3, 0))
+    x1, y1 = int(min(ncx + ax * 1.3, W)), int(min(ncy + ay * 1.3, H))
+    roi = img[y0:y1, x0:x1]
+    if roi.shape[0] < 20 or roi.shape[1] < 20: return img
+    ell = np.zeros(roi.shape[:2], np.float32)
+    cv2.ellipse(ell, (int(ncx - x0), int(ncy - y0)), (int(ax), int(ay)), 0, 0, 360, 1.0, -1)
+    ell = cv2.GaussianBlur(ell, (0, 0), max(ax, ay) * 0.15)
+    ycc = cv2.cvtColor(roi, cv2.COLOR_BGR2YCrCb).astype(np.float32)
+    Y, Cr, Cb = ycc[..., 0], ycc[..., 1], ycc[..., 2]
+    skin = ((Y > 60) & (Cr > 132) & (Cr < 190)).astype(np.float32)
+    k = max(5, int(w * 0.16)) | 1                       # "surroundings" scale ≈ a few spot sizes
+    base_cr = cv2.medianBlur(np.clip(Cr, 0, 255).astype(np.uint8), k).astype(np.float32)
+    base_cb = cv2.medianBlur(np.clip(Cb, 0, 255).astype(np.uint8), k).astype(np.float32)
+    base_y = cv2.medianBlur(np.clip(Y, 0, 255).astype(np.uint8), k).astype(np.float32)
+    d = Cr - base_cr
+    m = np.clip((d - 1.0) / 3.0, 0, 1) * skin * ell
+    m = cv2.dilate(m, np.ones((3, 3), np.uint8))
+    m = cv2.GaussianBlur(m, (0, 0), max(1.5, w * 0.008)) * strength
+    m = np.clip(m * 1.4, 0, 1)
+    ycc[..., 1] = Cr * (1 - m) + base_cr * m
+    ycc[..., 2] = Cb * (1 - m) + base_cb * m
+    ycc[..., 0] = Y * (1 - 0.7 * m) + np.maximum(Y, base_y) * 0.7 * m   # spots are a bit darker: lift them
+    img[y0:y1, x0:x1] = cv2.cvtColor(np.clip(ycc, 0, 255).astype(np.uint8), cv2.COLOR_YCrCb2BGR)
     return img
