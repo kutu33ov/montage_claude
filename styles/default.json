@@ -1,0 +1,46 @@
+{
+ "global": {
+  "font": "Inter",
+  "skin": true,
+  "skin_params": {
+   "strength": 0.5,
+   "passes": 1,
+   "texture": 0.6
+  },
+  "nose_fix": true,
+  "zoom": 1.12,
+  "cap_margin": 560,
+  "fixes": {
+   "threads": "Threads",
+   "трэдс": "Threads",
+   "youtube": "YouTube",
+   "ии": "ИИ"
+  },
+  "music": {
+   "file": "auto",
+   "volume_db": -22,
+   "duck": true,
+   "fade_out": 1.5
+  },
+  "fx": {
+   "auto": true,
+   "part_transition": "whip",
+   "part_sfx": "whoosh",
+   "progress_bar": false,
+   "watermark": null
+  },
+  "lut": null
+ },
+ "cover": {
+  "grade": false,
+  "size": 130,
+  "y": 1560,
+  "x": 84,
+  "zoom": 1.25,
+  "accent": [
+   132,
+   52,
+   255
+  ]
+ }
+}

@@ -1,0 +1,10 @@
+models
+projects/
+work/
+out/
+*.mp4
+*.mov
+*.wav
+__pycache__/
+!assets/**/*.wav
+!assets/**/*.mp3
