@@ -45,6 +45,8 @@ ZONES = {
     'cheek_left':  (0.28, 0.60, 0.12, 0.12),   # left as seen by the viewer
     'cheek_right': (0.74, 0.60, 0.12, 0.12),
     'between_brows': (0.52, 0.33, 0.08, 0.06),
+    # wide search area for red dots: whole nose incl. where it moves on head turns, above the lips
+    'nose_wide':   (0.53, 0.52, 0.23, 0.165),
 }
 
 def fix_nose(img, box, red=0.85, smooth=0.9):
@@ -99,7 +101,7 @@ def retouch(img, box, cfg=None):
     if k: img = smooth_skin(img, box, k, 1, 0.6)
     for z in cfg.get('zones', ['nose_tip']):
         img = fix_zone(img, box, z)
-    for z in cfg.get('spots', ['nose']):             # small red dots, after the tone fix
+    for z in cfg.get('spots', ['nose_wide']):             # small red dots, after the tone fix
         img = fix_spots(img, box, z)
     return img
 

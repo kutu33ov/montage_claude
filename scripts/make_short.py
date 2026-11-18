@@ -200,7 +200,7 @@ def render():
             if len(buf) == fsz:
                 fr = np.frombuffer(buf, np.uint8).reshape(SRC_H, cw, 3).copy()
                 if G.get('skin', True):
-                    if k % 8 == 0 or box is None:
+                    if True:   # every frame: on fast head moves a stale box misses the nose
                         nb = detect_face(fr)
                         if nb is not None: box = nb
                     fr = retouch(fr, box, sh.get('retouch', G.get('retouch')))
