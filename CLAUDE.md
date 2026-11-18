@@ -28,11 +28,15 @@ Render one short at a time (≈1–1.5 min each); the frame pipeline keeps memor
 
 ## Effects (scripts/fx.py) — full option list in `examples/short_example.json`
 Per short in config.json (anchor by `"word"`, source time `"at"` or output time `"out"`):
-- `emphasis` — big pop-up text with pop sound (+ optional `"shake"`): numbers, key claims («53%»).
-- `inserts` — image card (white rounded frame, shadow, slight tilt) with pop-in + pop sound. `pos: "auto"`
+- `emphasis` — big pop-up text with pop sound: numbers, key claims («53%»). `"shake": true` exists but the
+  owner finds shake often inappropriate — don't use it unless asked.
+- `inserts` — image card (white rounded frame, shadow, slight tilt) with pop-in + pop sound. The owner LIKES
+  charts: when the speech has numbers/stats, add a generated infographic with `"card": {...}` instead of `"img"`
+  (kinds `bars`, `stat`, `versus`, `columns` — see `scripts/card.py`). `pos: "auto"`
   fits it above the head (may cover hair, never the eyes) or between chin and captions.
   Images go to `assets/images` (or any path). Never invent facts on a card; label sources honestly.
 - `transitions` — `flash` | `whip` | `zoom` | `glitch` | `shake`, each with a matching sound.
+  The owner does NOT like `glitch` and finds `shake` usually out of place — prefer `whip`, `zoom`, `flash`.
   Auto: a `whip`+whoosh only where the short jumps > 30 s of source (`fx.part_gap`); trimmed repeats stay plain cuts.
 - `sfx` — extra sounds: whoosh, swipe, pop, click, ding, riser, boom, glitch (`assets/sfx`).
 - `music` — `{"file": "auto", "volume_db": -22, "duck": true}`; "auto" takes the owner's own track from
@@ -54,6 +58,9 @@ on every cut. All bundled sounds/music/LUTs are synthesised by `gen_sfx.py` / `g
 **Edit**
 - Pauses cut by audio silence (not whisper timestamps). Punch-in zoom 1.12 toggles on jump cuts.
 - Subtitles: white, thin black outline, 1–3 words, lowercase, Inter ExtraBold, lower third.
+  Prepositions/short conjunctions (в, к, на, с, по, и, а, не…) are NEVER the last word of a caption — they move
+  to the next caption with their word; particles (же, ли, бы) stay with the previous word. Lines longer than
+  18 chars shrink the font instead of wrapping. (Implemented in make_short.py — keep it that way.)
 - Retouch: light skin smoothing (strength 0.5) + redness fix ONLY on the nose tip, matched to the
   surrounding skin tone (it must never look pale). The owner dislikes heavy/plastic smoothing.
 - Loudness −14 LUFS.

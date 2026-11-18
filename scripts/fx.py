@@ -62,7 +62,7 @@ class FX:
         for ins in sh.get('inserts', []):
             tt = self.when(ins)
             if tt is None: continue
-            card = self.make_card(asset(ins['img'], 'images'), ins)
+            card = self.make_card(ins['card'] if 'card' in ins else asset(ins['img'], 'images'), ins)
             pos, y = ins.get('pos', 'auto'), ins.get('y')
             if pos == 'auto' and y is None:
                 # may cover hair/forehead, never the eyes
@@ -86,7 +86,7 @@ class FX:
             self.overlays.append(dict(img=txt, t0=tt, t1=min(total, tt + em.get('dur', 1.4)),
                                       pos=em.get('pos', 'auto'), anim=em.get('anim', 'pop'), y=y))
             if em.get('sfx', 'pop'): self.sfx.append(dict(file=em.get('sfx', 'pop'), t=tt, gain=em.get('gain', -6)))
-            if em.get('shake'): self.transitions.append(dict(type='shake', t=tt + 0.1, dur=0.35))
+            if em.get('shake', False): self.transitions.append(dict(type='shake', t=tt + 0.1, dur=0.35))
         # --- extra sound effects
         for s in sh.get('sfx', []):
             tt = self.when(s)
@@ -112,7 +112,11 @@ class FX:
 
     # ---------------------------------------------------------------- builders
     def make_card(self, path, o):
-        im = Image.open(path).convert('RGBA')
+        if isinstance(path, dict):                       # generated infographic (scripts/card.py)
+            from card import make as make_infographic
+            im = make_infographic(path); path = json.dumps(path, ensure_ascii=False)
+        else:
+            im = Image.open(path).convert('RGBA')
         tw = int(W * o.get('width', 0.62)); th = int(im.height * tw / im.width)
         maxh = int(H * o.get('max_height', 0.22))
         if th > maxh: tw, th = int(tw * maxh / th), maxh

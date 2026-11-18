@@ -98,11 +98,26 @@ def ts(t):
     return f"{h}:{m:02d}:{s:05.2f}"
 
 MAXW, MAXC = 3, 16
+# short words that must stay with the NEXT word (never end a caption line)...
+PROCLITIC = set('в во к ко на с со у о об обо по за из от до для без под над при про через и а но или да не ни'.split())
+# ...and particles that stick to the PREVIOUS word (never start a caption line)
+ENCLITIC = {'же', 'ли', 'бы', 'б', 'ж'}
+def chars(ws): return len(' '.join(x['t'] for x in ws))
 groups, cur = [], []
 for i, w in enumerate(words):
     gap = (w['s'] - words[i - 1]['e']) if i else 0
-    if cur and (len(cur) >= MAXW or len(' '.join(x['t'] for x in cur + [w])) > MAXC or gap > 0.45):
-        groups.append(cur); cur = []
+    want_break = bool(cur) and (len(cur) >= MAXW or chars(cur + [w]) > MAXC or gap > 0.45)
+    if want_break and gap < 0.6:
+        if w['t'] in ENCLITIC and chars(cur + [w]) <= MAXC + 6:
+            want_break = False                  # "можно же", "есть ли": particle stays on this line
+        elif all(x['t'] in PROCLITIC for x in cur):
+            want_break = False                  # line is only "в" / "и на": keep it with its word
+    if want_break:
+        carry = []
+        while len(cur) > 1 and cur[-1]['t'] in PROCLITIC and gap < 0.6:
+            carry.insert(0, cur.pop())          # "в" / "на" / "и" go down to the next line with their word
+        groups.append(cur)
+        cur = carry
     cur.append(w)
 if cur: groups.append(cur)
 
@@ -114,7 +129,9 @@ for gi, g in enumerate(groups):
         if nxt - b < 0.35: b = nxt
     b = min(b, total)
     if b - a < 0.05: continue
-    ev.append(f"Dialogue: 0,{ts(a)},{ts(b)},Cap,,0,0,0,,{' '.join(x['t'] for x in g)}")
+    txt = ' '.join(x['t'] for x in g)
+    fs = f"{{\\fs{int(78 * 18 / len(txt))}}}" if len(txt) > 18 else ''   # long line: shrink instead of wrapping
+    ev.append(f"Dialogue: 0,{ts(a)},{ts(b)},Cap,,0,0,0,,{fs}{txt}")
 hook = sh.get('hook')
 if hook:
     ev.append(f"Dialogue: 1,{ts(0)},{ts(min(3.2, total))},Hook,,0,0,0,,{{\\fad(0,250)}}{hook}")
