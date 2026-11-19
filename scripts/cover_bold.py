@@ -144,13 +144,22 @@ def make(c):
         img = bottom_fade(rgb)
     elif lay == 'memory2':                       # speaker untouched + blurred childhood photo falling apart
         img = bottom_fade(rgb)
-        ph = child_photo()
+        if c.get('memory_img'):                  # owner's old photo: enlarge, soften, age it
+            ph = Image.open(c['memory_img']).convert('RGB'); k = c.get('memory_w', 470) / ph.width
+            ph = ph.resize((int(ph.width * k), int(ph.height * k)), Image.LANCZOS).filter(ImageFilter.GaussianBlur(c.get('memory_blur', 2.2)))
+            ph = Image.blend(ph, Image.new('RGB', ph.size, (150, 122, 88)), 0.18)
+        else:
+            ph = child_photo()
         card = Image.new('RGBA', (ph.width + 36, ph.height + 100), (244, 240, 228, 255)); card.paste(ph, (18, 18))
-        card = disintegrate(card, start=0.5, block=9).rotate(c.get('memory_rot', 8), resample=Image.BICUBIC, expand=True)
+        card = disintegrate(card, start=c.get('memory_break', 0.5), block=9).rotate(c.get('memory_rot', 8), resample=Image.BICUBIC, expand=True)
         sh = Image.new('RGBA', img.size, (0, 0, 0, 0)); a = np.asarray(card)[..., 3]
         sh.paste(Image.new('RGBA', card.size, (0, 0, 0, 120)), (c.get('memory_x', 10) + 12, c.get('memory_y', 120) + 16), Image.fromarray(a))
         img.alpha_composite(sh.filter(ImageFilter.GaussianBlur(14)))
         img.alpha_composite(card, (c.get('memory_x', 10), c.get('memory_y', 120)))
+        if c.get('memory_behind', False):                # speaker in front: particles fly BEHIND the head
+            m = matte(bgr)
+            person = bottom_fade(rgb); person.putalpha(Image.fromarray((m * 255).astype(np.uint8)))
+            img.alpha_composite(person)
     else:
         m = matte(bgr)
         person = rgb.copy(); person.putalpha(Image.fromarray((m * 255).astype(np.uint8)))
