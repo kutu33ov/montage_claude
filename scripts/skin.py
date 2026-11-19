@@ -215,6 +215,11 @@ class Retoucher:
         # smooth_skin expects a Haar-like box (bigger, includes forehead): expand the YuNet box a bit
         hb = np.array([x - 0.08 * w, y - 0.12 * h, w * 1.16, h * 1.12])
         out = smooth_skin(img, hb, k, 1, 0.6) if k else img.copy()
+        if self.cfg.get('tone', 0):                    # subtle whole-face redness evening (owner: "чуть-чуть")
+            fr = forehead_ref(out, box, lm)
+            if fr is not None:
+                self.fref = fr if getattr(self, 'fref', None) is None else self.fref * 0.9 + fr * 0.1
+            out = even_tone(out, box, getattr(self, 'fref', None), self.cfg['tone'])
         r = cheek_ref_lm(out, box, lm)
         if r is not None:
             self.ref = r if self.ref is None else self.ref * (1 - self.ref_ema) + r * self.ref_ema
@@ -256,3 +261,33 @@ def cheek_ref_lm(img, box, lm):
         ycc = ycc[(ycc[:, 0] > 85) & (ycc[:, 1] > 130) & (ycc[:, 1] < 185)]
         if len(ycc) > 25: vals.append(np.median(ycc[:, 1:], 0))
     return np.median(vals, 0) if vals else None
+
+
+def forehead_ref(img, box, lm):
+    """skin chroma of the forehead (above the eyes) — usually the least red skin on a cold/flushed face"""
+    ec = (lm[0] + lm[1]) / 2; ed = np.linalg.norm(lm[1] - lm[0])
+    cx, cy, r = ec[0], ec[1] - ed * 0.55, ed * 0.28
+    p = img[int(max(cy - r * 0.6, 0)):int(cy + r * 0.6), int(max(cx - r, 0)):int(cx + r)]
+    if p.size == 0: return None
+    ycc = cv2.cvtColor(p, cv2.COLOR_BGR2YCrCb).reshape(-1, 3).astype(np.float32)
+    ycc = ycc[(ycc[:, 0] > 70) & (ycc[:, 1] > 128) & (ycc[:, 1] < 185)]
+    return np.median(ycc[:, 1:], 0) if len(ycc) > 30 else None
+
+def even_tone(img, box, ref, strength=0.3, warmth=4.0):
+    """take away only `strength` of the redness ABOVE the forehead tone (+warmth) on facial skin;
+    everything else (shadows, lips, beard, background) untouched — subtle, no filter look"""
+    if ref is None or strength <= 0: return img
+    H, W = img.shape[:2]; x, y, w, h = box
+    X0, Y0, X1, Y1 = int(max(x - 0.1 * w, 0)), int(max(y - 0.15 * h, 0)), int(min(x + 1.1 * w, W)), int(min(y + 1.05 * h, H))
+    roi = img[Y0:Y1, X0:X1]
+    if roi.size == 0: return img
+    ycc = cv2.cvtColor(roi, cv2.COLOR_BGR2YCrCb).astype(np.float32)
+    Y, Cr = ycc[..., 0], ycc[..., 1]
+    sk = ((Y > 70) & (Cr > 130) & (Cr < 190)).astype(np.float32)
+    ell = np.zeros(roi.shape[:2], np.float32)
+    cv2.ellipse(ell, (int(x + w / 2 - X0), int(y + h * 0.45 - Y0)), (int(w * 0.6), int(h * 0.62)), 0, 0, 360, 1.0, -1)
+    m = cv2.GaussianBlur(sk * ell, (0, 0), max(2, w * 0.03)) * strength
+    ex = np.clip(Cr - (ref[0] + warmth), 0, None)
+    ycc[..., 1] = Cr - m * ex
+    img[Y0:Y1, X0:X1] = cv2.cvtColor(np.clip(ycc, 0, 255).astype(np.uint8), cv2.COLOR_YCrCb2BGR)
+    return img
