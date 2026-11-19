@@ -70,11 +70,13 @@ Per short in config.json (anchor by `"word"`, source time `"at"` or output time 
   (+warmth so it's never pale); small red dots removed (`spots`). Extra redness zones (`forehead`,
   `cheek_left`…) via `zones`. The owner checks the nose tip frame by frame — verify with a nose contact
   sheet over the whole short (uniform frames + fastest-motion frames) before sending.
-- `loop` — `true`: endless video. Last segment uses the first segment's zoom, the last 0.35 s dissolve into the
-  first frame, music has no audible fade, hook title hidden (`"hook_in_loop": true` to keep it). The CONTENT
+- `loop` — `true`: endless video. Last segment uses the first segment's zoom, HARD cut back to the start (the
+  owner disliked the dissolve; `"loop_xfade": 0.35` re-enables it), music has no audible fade, hook title hidden (`"hook_in_loop": true` to keep it). The CONTENT
   must loop too: end on a phrase that leads into the opening line (e.g. end «…ролик, который тоже начался
   с вопроса, рассчитанного на то, чтобы тебя зацепить» → start «Ты заметил, что интернет…»).
 - `fx.progress_bar`, `fx.watermark` ("@nick") — off by default.
+End every part at least ~0.25 s after the last word's end time (whisper `e`), never on it — otherwise
+the last word gets clipped («подумай» was cut off).
 Taste: 1–3 accents per short (one emphasis, one insert/glitch, a ding on the punchline). Don't put a sound
 on every cut. All bundled sounds/music/LUTs are synthesised by `gen_sfx.py` / `gen_luts.py` — royalty-free.
 

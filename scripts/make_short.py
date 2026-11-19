@@ -187,7 +187,7 @@ def render():
         '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', '-shortest', out], stdin=subprocess.PIPE)
     fsz = cw * SRC_H * 3
     acc, box, written = 0.0, None, 0
-    first, XF = None, 0.35
+    first, XF = None, sh.get('loop_xfade', G.get('loop_xfade', 0.0))   # owner prefers a hard loop cut (no dissolve)
     n_total = round(total * FPS)
     for s, e, z in plan:
         acc += e - s
@@ -207,7 +207,7 @@ def render():
             if last is not None:
                 outf = fx.apply(last.copy(), written / FPS)
                 if first is None: first = outf.copy()
-                if LOOP and written >= n_total - XF * FPS:   # dissolve into the first frame -> seamless loop
+                if LOOP and XF > 0 and written >= n_total - XF * FPS:   # dissolve into the first frame -> seamless loop
                     p = (written - (n_total - XF * FPS)) / (XF * FPS)
                     outf = cv2.addWeighted(outf, 1 - p, first, p, 0)
                 enc.stdin.write(outf.tobytes())
