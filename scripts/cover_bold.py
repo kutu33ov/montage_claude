@@ -18,19 +18,24 @@ BLACK = '/usr/share/fonts/opentype/inter/Inter-Black.otf'
 if not os.path.exists(BLACK): BLACK = os.path.join(ROOT, 'assets/fonts/Inter-Black.otf')
 EMOJI = '/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf'
 RED = (255, 38, 38)
+RETOUCH = {'skin': 0.5}
 
 def grab(src, t, cx, zoom=1.15):
-    """9:16 crop around the face at time t, retouched; face centre at ~36% height"""
-    bx = int(min(max(cx - 304, 0), 1920 - 608))
-    raw = subprocess.run(['ffmpeg', '-v', 'error', '-ss', f'{t:.2f}', '-i', src, '-frames:v', '1', '-vf', f'crop=608:1080:{bx}:0',
+    """9:16 crop around the face at time t, retouched; face centre at ~36% height (landscape or vertical source)"""
+    wh = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', src],
+                        capture_output=True, text=True).stdout.strip().split(',')
+    sw, sh = int(wh[0]), int(wh[1])
+    cw = min(sw, round(sh * 9 / 16 / 2) * 2)
+    bx = int(min(max(cx - cw / 2, 0), sw - cw))
+    raw = subprocess.run(['ffmpeg', '-v', 'error', '-ss', f'{t:.2f}', '-i', src, '-map', '0:v:0', '-frames:v', '1', '-vf', f'crop={cw}:{sh}:{bx}:0',
                           '-f', 'image2pipe', '-vcodec', 'png', '-'], capture_output=True).stdout
     im = cv2.imdecode(np.frombuffer(raw, np.uint8), 1)
-    im = skin.Retoucher({'skin': 0.5})(im)
+    im = skin.Retoucher(RETOUCH)(im)
     b, lm = skin.yunet_detect(im)
-    fx, fy = (b[0] + b[2] / 2, b[1] + b[3] / 2) if b is not None else (304, 400)
-    cw, ch = int(608 / zoom), int(1080 / zoom)
-    x0 = int(min(max(fx - cw / 2, 0), 608 - cw)); y0 = int(min(max(fy - ch * 0.36, 0), 1080 - ch))
-    return cv2.resize(im[y0:y0 + ch, x0:x0 + cw], (W, H), interpolation=cv2.INTER_LANCZOS4)
+    fx, fy = (b[0] + b[2] / 2, b[1] + b[3] / 2) if b is not None else (cw / 2, sh * 0.37)
+    w2, h2 = int(cw / zoom), int(sh / zoom)
+    x0 = int(min(max(fx - w2 / 2, 0), cw - w2)); y0 = int(min(max(fy - h2 * 0.36, 0), sh - h2))
+    return cv2.resize(im[y0:y0 + h2, x0:x0 + w2], (W, H), interpolation=cv2.INTER_LANCZOS4)
 
 def matte(bgr):
     import onnxruntime as ort
@@ -194,4 +199,5 @@ def make(c):
     img.convert('RGB').save(c['out'], quality=95); print('ok', c['out'])
 
 if __name__ == '__main__':
-    for c in json.load(open(sys.argv[1])): make(c)
+    for c in json.load(open(sys.argv[1])):
+        RETOUCH = c.get('retouch', {'skin': 0.5}); make(c)
