@@ -52,6 +52,16 @@ for c in sh.get('cut', []):  # manual cuts [a,b] in source time
             if e > c[1]: new.append([c[1], e])
     keeps = new
 keeps = [k for k in keeps if k[1] - k[0] > 0.12]
+# captions only for words that are actually heard (manual cuts remove repeats like «и и», «слишком слишком»)
+words = [w for w in words if not any(c[0] <= (w['s'] + w['e']) / 2 <= c[1] for c in sh.get('cut', []))]
+# glue split-off parts back on: «когда» + «-нибудь» -> «когда-нибудь», «какую» + «-то» -> «какую-то»
+glued = []
+for w in words:
+    if glued and w['t'].startswith('-'):
+        glued[-1] = dict(glued[-1], t=glued[-1]['t'] + w['t'], e=w['e'])
+    else:
+        glued.append(w)
+words = glued
 
 def src2out(t):
     acc = 0.0
