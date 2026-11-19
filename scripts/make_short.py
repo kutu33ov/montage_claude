@@ -24,8 +24,8 @@ fixes.update({k.lower(): v for k, v in sh.get('fixes', {}).items()})
 for w in words:
     key = re.sub(r'[^\w\-]', '', w['w'].lower())
     w['t'] = fixes.get(key, re.sub(r'[.,!?…«»"]', '', w['w']).lower())
-# drop words mapped to empty string (e.g. merged pairs like "тик"+"ток")
-words = [w for w in words if w['t']]
+# drop words mapped to empty string (e.g. merged pairs like "тик"+"ток") and zero-length hallucinations
+words = [w for w in words if w['t'] and w['e'] - w['s'] >= 0.04]
 
 # ---------- keep intervals (cut pauses by audio silence) ----------
 sil = json.load(open(G['silences']))
