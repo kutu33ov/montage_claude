@@ -12,7 +12,9 @@ G = cfg_all['global']
 sh = next(s for s in cfg_all['shorts'] if s['id'] == sys.argv[2])
 
 SRC, OUT_W, OUT_H, FPS = G['src'], 1080, 1920, 30
-SRC_W, SRC_H = 1920, 1080
+_wh = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height',
+                      '-of', 'csv=p=0', SRC], capture_output=True, text=True).stdout.strip().split(',')
+SRC_W, SRC_H = int(_wh[0]), int(_wh[1])          # landscape 1920x1080 or vertical 1080x1920 (from 4K phone footage)
 PAD_IN, PAD_OUT = 0.07, 0.10
 ZOOM = G.get('zoom', 1.12)
 
@@ -92,7 +94,7 @@ faces = np.array(json.load(open(G['faces'])))
 f = faces[(faces[:, 0] >= sh['start']) & (faces[:, 0] <= sh['end'])]
 f = f[np.abs(f[:, 1] - np.median(f[:, 1])) < 150]
 cx, cy = float(np.median(f[:, 1])) + sh.get('x_shift', 0), float(np.median(f[:, 2]))
-cw = round(SRC_H * OUT_W / OUT_H / 2) * 2  # 608
+cw = min(SRC_W, round(SRC_H * OUT_W / OUT_H / 2) * 2)  # 608 for landscape, full width for vertical
 bx = int(min(max(cx - cw / 2, 0), SRC_W - cw))
 
 def zoom_box(z):
@@ -210,7 +212,7 @@ def render():
     if fx.lut: vf = f"lut3d='{asset(fx.lut, 'luts')}'," + vf
     enc = subprocess.Popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{OUT_W}x{OUT_H}', '-r', str(FPS), '-i', '-',
         '-i', wav, '-map', '0:v', '-map', '1:a', '-vf', vf,
-        '-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-pix_fmt', 'yuv420p', '-profile:v', 'high',
+        '-c:v', 'libx264', '-preset', 'slow', '-crf', str(G.get('crf', 17)), '-pix_fmt', 'yuv420p', '-profile:v', 'high',
         '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', '-shortest', out], stdin=subprocess.PIPE)
     fsz = cw * SRC_H * 3
     acc, box, written = 0.0, None, 0
