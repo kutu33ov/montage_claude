@@ -56,21 +56,19 @@ for l in p.stderr.splitlines():
     if m: sil.append([st, float(m.group(1))])
 json.dump(sil, open(f'{proj}/silences.json', 'w'))
 
-# 5. faces (1 per second)
+# 5. faces (1 per second) — YuNet: finds frontal AND 3/4 / side faces (Haar picked wall plates / clocks)
+sys.path.insert(0, HERE)
+import skin
 cap = cv2.VideoCapture(video)
 dur = cap.get(cv2.CAP_PROP_FRAME_COUNT) / max(cap.get(cv2.CAP_PROP_FPS), 1)
-cc = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 faces = []
 for t in np.arange(0, dur, 1.0):
     cap.set(cv2.CAP_PROP_POS_MSEC, t * 1000); ok, f = cap.read()
     if not ok: continue
     sw = 960 / f.shape[1]
-    g = cv2.cvtColor(cv2.resize(f, None, fx=sw, fy=sw), cv2.COLOR_BGR2GRAY)
-    fs = cc.detectMultiScale(g, 1.1, 6, minSize=(60, 60))
-    if len(fs):
-        x, y, w, h = max(fs, key=lambda r: r[2] * r[3])
-        if w / sw > f.shape[1] * 0.11:   # drop small false hits (clocks, plates on the wall)
-            faces.append((float(t), float(x + w / 2) / sw, float(y + h / 2) / sw, float(w) / sw))
+    b, lm = skin.yunet_detect(cv2.resize(f, None, fx=sw, fy=sw))
+    if b is not None and b[2] / sw > f.shape[1] * 0.06:
+        faces.append((float(t), float(b[0] + b[2] / 2) / sw, float(b[1] + b[3] / 2) / sw, float(b[2]) / sw * 1.15))
 json.dump(faces, open(f'{proj}/faces.json', 'w'))
 
 # 6. config skeleton
