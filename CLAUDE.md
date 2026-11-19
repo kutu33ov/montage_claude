@@ -54,6 +54,10 @@ Per short in config.json (anchor by `"word"`, source time `"at"` or output time 
 - `transitions` — `flash` | `whip` | `zoom` | `glitch` | `shake`, each with a matching sound.
   The owner does NOT like `glitch` and finds `shake` usually out of place — prefer `whip`, `zoom`, `flash`.
   Auto: a `whip`+whoosh only where the short jumps > 30 s of source (`fx.part_gap`); trimmed repeats stay plain cuts.
+- `clips` — someone else's video inside the short: `{"file": path, "from": 20, "to": 35, "word"/"at"/"out": anchor,
+  "layout": "full" | "split" | "card", "audio": "mute" | "mix", "audio_db": -8, "label": "Simons & Chabris, 1999"}`.
+  `full` = clip over a blurred copy of itself, `split` = clip on top / speaker below (best when he comments on it),
+  `card` = small framed clip above the head. Always label the source; keep foreign footage short (Content ID).
 - `sfx` — extra sounds: whoosh, swipe, pop, click, ding, riser, boom, glitch (`assets/sfx`).
 - `music` — `{"file": "auto", "volume_db": -22, "duck": true}`; "auto" takes the owner's own track from
   `assets/music` first, the synthetic `placeholder_lofi_88bpm.wav` only if there is none. Ducked under the voice.

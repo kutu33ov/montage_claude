@@ -170,13 +170,14 @@ def fix_nose_red(img, box, ref, warmth=2.5, strength=1.0):
     ell = cv2.GaussianBlur(ell, (0, 0), max(ax, ay) * 0.12)
     ycc = cv2.cvtColor(roi, cv2.COLOR_BGR2YCrCb).astype(np.float32)
     Y, Cr, Cb = ycc[..., 0], ycc[..., 1], ycc[..., 2]
-    sk = ((Y > 55) & (Cr > 130) & (Cr < 190)).astype(np.float32)
+    sk = ((Y > 75) & (Cr > 130) & (Cr < 190)).astype(np.float32)   # no shadows / nostrils
+    sk = cv2.GaussianBlur(sk, (0, 0), 1.2)
     tcr, tcb = ref[0] + warmth, ref[1]
     ex = Cr - tcr
     m = np.clip(ex / 5.0, 0, 1) * sk * ell
     m = cv2.GaussianBlur(m, (0, 0), max(1.5, w * 0.01)) * strength
     ycc[..., 1] = Cr - m * np.clip(ex, 0, None)
-    ycc[..., 2] = Cb + m * np.clip(tcb - Cb, 0, None) * 0.6
+    # Cb is left alone: pushing it towards the cheeks added blue patches
     img[Y0:Y1, X0:X1] = cv2.cvtColor(np.clip(ycc, 0, 255).astype(np.uint8), cv2.COLOR_YCrCb2BGR)
     return img
 

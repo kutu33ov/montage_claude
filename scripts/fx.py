@@ -91,6 +91,15 @@ class FX:
         for s in sh.get('sfx', []):
             tt = self.when(s)
             if tt is not None: self.sfx.append(dict(file=s['file'], t=tt, gain=s.get('gain', -8)))
+        # --- video clips (someone else's footage) shown while the short plays
+        self.clips = []
+        for c in sh.get('clips', []):
+            tt = self.when(c)
+            if tt is None: continue
+            dur = float(c['to']) - float(c['from'])
+            self.clips.append(dict(c, t0=tt, t1=min(total, tt + dur), dur=dur, reader=None,
+                                   file=c['file'] if os.path.exists(c['file']) else asset(c['file'], 'overlays')))
+            if c.get('sfx', 'swipe'): self.sfx.append(dict(file=c.get('sfx', 'swipe'), t=tt - 0.05, gain=-12))
         # --- static layers
         self.progress = fx.get('progress_bar', False)
         self.wm = None
@@ -175,7 +184,67 @@ class FX:
         roi = frame[y0:y1, x0:x1].astype(np.float32)
         frame[y0:y1, x0:x1] = (roi * (1 - a) + sub[..., 2::-1].astype(np.float32) * a).astype(np.uint8)
 
+    def clip_reader(self, c):
+        lay = c.get('layout', 'full')
+        if lay == 'full':
+            vf = ("split[a][b];[a]scale=-2:1920,crop=1080:1920,boxblur=30:3,eq=brightness=-0.18[bg];"
+                  "[b]scale=1080:-2[fg];[bg][fg]overlay=0:(H-h)/2-160")
+            size = (W, H)
+        elif lay == 'split':
+            vf = ("split[a][b];[a]scale=-2:960,crop=1080:960,boxblur=30:3,eq=brightness=-0.18[bg];"
+                  "[b]scale=-2:900[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2")
+            size = (W, 960)
+        else:  # card
+            vf = f"scale={int(W * c.get('width', 0.6)) // 2 * 2}:-2"
+            size = None
+        cmd = ['ffmpeg', '-v', 'error', '-ss', str(c['from']), '-t', f"{c['dur']:.3f}", '-i', c['file'], '-an',
+               '-filter_complex', f"fps={self.fps},{vf}", '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-']
+        if size is None:   # card size depends on the clip aspect
+            pr = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height',
+                                 '-of', 'csv=p=0', c['file']], capture_output=True, text=True).stdout.strip().split(',')
+            cw = int(W * c.get('width', 0.6)) // 2 * 2; size = (cw, int(round(cw * int(pr[1]) / int(pr[0]) / 2)) * 2)
+        c['size'] = size
+        c['reader'] = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+        c['last'] = None
+
+    def clip_frame(self, c):
+        if c['reader'] is None: self.clip_reader(c)
+        w, h = c['size']; buf = c['reader'].stdout.read(w * h * 3)
+        if len(buf) == w * h * 3: c['last'] = np.frombuffer(buf, np.uint8).reshape(h, w, 3).copy()
+        return c['last']
+
+    def label(self, text):
+        if not hasattr(self, '_labels'): self._labels = {}
+        if text not in self._labels:
+            f = font(30, 'SemiBold'); d = ImageDraw.Draw(Image.new('RGBA', (1, 1))); bb = d.textbbox((0, 0), text, font=f)
+            im = Image.new('RGBA', (bb[2] + 28, bb[3] + 18), (0, 0, 0, 0))
+            ImageDraw.Draw(im).rounded_rectangle((0, 0, im.width - 1, im.height - 1), 10, fill=(0, 0, 0, 140))
+            ImageDraw.Draw(im).text((14, 6), text, font=f, fill=(255, 255, 255, 230))
+            self._labels[text] = np.asarray(im)
+        return self._labels[text]
+
+    def apply_clips(self, frame, tt):
+        for c in self.clips:
+            if not c['t0'] <= tt <= c['t1']: continue
+            cf = self.clip_frame(c)
+            if cf is None: continue
+            a = min(1.0, (tt - c['t0']) / 0.15, (c['t1'] - tt) / 0.15)
+            lay = c.get('layout', 'full')
+            if lay == 'full':
+                comp = cf; frame[:] = (frame * (1 - a) + comp * a).astype(np.uint8); ly = (H - 810) // 2 - 160 + 810 + 12
+            elif lay == 'split':
+                spk = frame[int(H * 0.16):int(H * 0.16) + 960].copy()       # speaker: face area, bottom half
+                comp = np.vstack([cf, spk]); frame[:] = (frame * (1 - a) + comp * a).astype(np.uint8); ly = 960 - 58
+            else:
+                h, w = cf.shape[:2]; bd = 8
+                card = np.full((h + 2 * bd, w + 2 * bd, 4), 255, np.uint8); card[bd:-bd, bd:-bd, :3] = cf[..., ::-1]
+                y = c.get('y', 60); self.blend(frame, card, (W - card.shape[1]) // 2, y, a); ly = y + h + 2 * bd + 10
+            if c.get('label'):
+                lb = self.label(c['label']); self.blend(frame, lb, W - lb.shape[1] - 30, ly if lay != 'split' else ly, a)
+        return frame
+
     def apply(self, frame, tt):
+        frame = self.apply_clips(frame, tt)
         # transitions (geometry / colour)
         for tr in self.transitions:
             p = (tt - (tr['t'] - tr['dur'] / 2)) / tr['dur']
@@ -261,6 +330,13 @@ class FX:
                 mix.append('[m]'); idx += 1
         if not used_sc:
             fl.append('[vsc]anullsink')
+        for k, c in enumerate(self.clips):
+            if c.get('audio', 'mute') == 'mute': continue
+            ms = int(c['t0'] * 1000); g = c.get('audio_db', -8)
+            inputs += ['-ss', str(c['from']), '-t', f"{c['dur']:.3f}", '-i', c['file']]
+            fl.append(f'[{idx}:a]aformat=sample_rates=48000:channel_layouts=stereo,afade=t=in:d=0.2,'
+                      f'afade=t=out:st={max(0, c["dur"] - 0.3):.3f}:d=0.3,adelay={ms}|{ms},volume={g}dB[c{k}]')
+            mix.append(f'[c{k}]'); idx += 1
         for k, s in enumerate(sorted(self.sfx, key=lambda s: s['t'])):
             path = asset(s['file'], 'sfx'); ms = max(0, int(s['t'] * 1000))
             if s['t'] >= self.total: continue
@@ -276,5 +352,5 @@ class FX:
         return out_wav
 
     def summary(self):
-        return (f"fx: {len(self.transitions)} transitions, {len(self.overlays)} overlays, {len(self.sfx)} sfx, "
+        return (f"fx: {len(self.transitions)} transitions, {len(self.overlays)} overlays, {len(self.clips)} clips, {len(self.sfx)} sfx, "
                 f"music={'yes' if self.music else 'no'}, progress={'yes' if self.progress else 'no'}")
