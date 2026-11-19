@@ -147,16 +147,23 @@ class FX:
         return np.asarray(im)
 
     def make_text(self, text, o):
-        f = font(o.get('size', 210), o.get('weight', 'Black'))
         d = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
-        bb = d.textbbox((0, 0), text, font=f, stroke_width=12)
-        tw, th = bb[2] - bb[0], bb[3] - bb[1]
+        size = o.get('size', 210)
+        if '\n' not in text and len(text) > 12 and ' ' in text:      # long phrase -> two balanced lines
+            ws = text.split(); best = min(range(1, len(ws)), key=lambda i: abs(len(' '.join(ws[:i])) - len(' '.join(ws[i:]))))
+            text = ' '.join(ws[:best]) + '\n' + ' '.join(ws[best:])
+        while True:                                                    # shrink until it fits the screen
+            f = font(size, o.get('weight', 'Black'))
+            bb = d.multiline_textbbox((0, 0), text, font=f, stroke_width=12, align='center')
+            if bb[2] - bb[0] <= W - 120 or size <= 60: break
+            size -= 6
+        tw, th = int(bb[2] - bb[0]), int(bb[3] - bb[1])
         im = Image.new('RGBA', (tw + 80, th + 80), (0, 0, 0, 0))
         shd = Image.new('RGBA', im.size, (0, 0, 0, 0))
-        ImageDraw.Draw(shd).text((40 - bb[0] + 8, 40 - bb[1] + 12), text, font=f, fill=(0, 0, 0, 170), stroke_width=12, stroke_fill=(0, 0, 0, 170))
+        ImageDraw.Draw(shd).multiline_text((40 - bb[0] + 8, 40 - bb[1] + 12), text, font=f, fill=(0, 0, 0, 170), stroke_width=12, stroke_fill=(0, 0, 0, 170), align='center')
         im.alpha_composite(shd.filter(ImageFilter.GaussianBlur(10)))
         col = tuple(o.get('color', (255, 255, 255)))
-        ImageDraw.Draw(im).text((40 - bb[0], 40 - bb[1]), text, font=f, fill=col, stroke_width=o.get('stroke', 10), stroke_fill=(0, 0, 0))
+        ImageDraw.Draw(im).multiline_text((40 - bb[0], 40 - bb[1]), text, font=f, fill=col, stroke_width=o.get('stroke', 10), stroke_fill=(0, 0, 0), align='center')
         rot = o.get('rotate', -4)
         if rot: im = im.rotate(rot, resample=Image.BICUBIC, expand=True)
         return np.asarray(im)
