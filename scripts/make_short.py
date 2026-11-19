@@ -218,6 +218,7 @@ def render():
         '-i', wav, '-map', '0:v', '-map', '1:a', '-vf', vf,
         '-c:v', 'libx264', '-preset', 'slow', '-crf', str(G.get('crf', 17)), '-pix_fmt', 'yuv420p', '-profile:v', 'high',
         '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv',
+        '-maxrate', G.get('maxrate', '25M'), '-bufsize', G.get('bufsize', '50M'),   # noisy 60fps footage blew up to 60+ Mbps
         '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', '-shortest', out], stdin=subprocess.PIPE)
     fsz = cw * SRC_H * 3
     acc, box, written = 0.0, None, 0
