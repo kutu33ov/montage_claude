@@ -205,7 +205,7 @@ class FX:
             vf = f"scale={int(W * c.get('width', 0.6)) // 2 * 2}:-2"
             size = None
         cmd = ['ffmpeg', '-v', 'error', '-ss', str(c['from']), '-t', f"{c['dur']:.3f}", '-i', c['file'], '-an',
-               '-filter_complex', f"fps={self.fps},{vf}", '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-']
+               '-filter_complex', f"fps={self.fps},{vf},scale=in_color_matrix=bt709:in_range=tv", '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-']
         if size is None:   # card size depends on the clip aspect
             pr = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height',
                                  '-of', 'csv=p=0', c['file']], capture_output=True, text=True).stdout.strip().split(',')

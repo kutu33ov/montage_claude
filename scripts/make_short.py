@@ -11,7 +11,7 @@ cfg_all = json.load(open(sys.argv[1]))
 G = cfg_all['global']
 sh = next(s for s in cfg_all['shorts'] if s['id'] == sys.argv[2])
 
-SRC, OUT_W, OUT_H, FPS = G['src'], 1080, 1920, 30
+SRC, OUT_W, OUT_H, FPS = G['src'], 1080, 1920, int(G.get('fps', 30))
 _wh = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height',
                       '-of', 'csv=p=0', SRC], capture_output=True, text=True).stdout.strip().split(',')
 SRC_W, SRC_H = int(_wh[0]), int(_wh[1])          # landscape 1920x1080 or vertical 1080x1920 (from 4K phone footage)
@@ -212,11 +212,12 @@ def render():
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', SRC, '-filter_complex_script', afg, '-map', '[aout]', '-c:a', 'pcm_s16le', voice], check=True)
     wav = fx.mix_audio(voice, f"{wd}/{sid}.wav")
     out = f"{G['outdir']}/{sid}.mp4"
-    vf = f'ass={ass_path}:fontsdir=/usr/share/fonts'
+    vf = f'ass={ass_path}:fontsdir=/usr/share/fonts,scale=out_color_matrix=bt709:out_range=tv'   # RGB->YUV with the HD matrix (was BT.601 -> washed colours)
     if fx.lut: vf = f"lut3d='{asset(fx.lut, 'luts')}'," + vf
     enc = subprocess.Popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{OUT_W}x{OUT_H}', '-r', str(FPS), '-i', '-',
         '-i', wav, '-map', '0:v', '-map', '1:a', '-vf', vf,
         '-c:v', 'libx264', '-preset', 'slow', '-crf', str(G.get('crf', 17)), '-pix_fmt', 'yuv420p', '-profile:v', 'high',
+        '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv',
         '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', '-shortest', out], stdin=subprocess.PIPE)
     fsz = cw * SRC_H * 3
     acc, box, written = 0.0, None, 0
@@ -226,7 +227,7 @@ def render():
         acc += e - s
         n = round(acc * FPS) - written
         rd = subprocess.Popen(['ffmpeg', '-v', 'error', '-ss', f'{s:.3f}', '-t', f'{e - s:.3f}', '-i', SRC, '-an', '-frames:v', str(n),
-            '-vf', f'fps={FPS},crop={cw}:{SRC_H}:{bx}:0', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-'], stdout=subprocess.PIPE)
+            '-vf', f'fps={FPS},crop={cw}:{SRC_H}:{bx}:0,scale=in_color_matrix=bt709:in_range=tv', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-'], stdout=subprocess.PIPE)
         zx, zy, zw, zh = zoom_box(z)
         rt.pgray = None   # no optical flow across a jump cut
         last = None
