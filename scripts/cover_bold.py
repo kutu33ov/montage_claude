@@ -112,12 +112,45 @@ def disintegrate(card, start=0.55, block=10, seed=3):
                                                                          out[Y:Y + blk.shape[0], X:X + blk.shape[1]])
     return Image.fromarray(out)
 
+def child_photo(w=380, h=460, seed=5):
+    """an old, faded, blurred photo with the silhouette of a small boy (illustration, not a real photo)"""
+    rnd = np.random.default_rng(seed)
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    sky = np.array([196, 205, 190], np.float32); ground = np.array([120, 138, 96], np.float32)
+    g = np.clip((yy - h * 0.55) / (h * 0.1), 0, 1)[..., None]
+    a = sky * (1 - g) + ground * g
+    im = Image.fromarray(a.astype(np.uint8)); d = ImageDraw.Draw(im)
+    cx, base = w * 0.52, h * 0.86
+    skin_c, shirt, pants, hair = (226, 186, 160), (196, 72, 60), (70, 82, 120), (92, 64, 44)
+    d.rounded_rectangle((cx - 34, base - 120, cx - 8, base), 10, fill=pants)          # legs
+    d.rounded_rectangle((cx + 8, base - 120, cx + 34, base), 10, fill=pants)
+    d.rounded_rectangle((cx - 52, base - 235, cx + 52, base - 105), 30, fill=shirt)    # body
+    d.rounded_rectangle((cx - 78, base - 225, cx - 46, base - 135), 14, fill=shirt)    # arms
+    d.rounded_rectangle((cx + 46, base - 225, cx + 78, base - 135), 14, fill=shirt)
+    d.ellipse((cx - 50, base - 335, cx + 50, base - 228), fill=skin_c)                 # big child head
+    d.chord((cx - 54, base - 342, cx + 54, base - 262), 180, 360, fill=hair)
+    im = im.filter(ImageFilter.GaussianBlur(7))
+    a = np.asarray(im).astype(np.float32)
+    a = a * 0.8 + np.array([150, 120, 85]) * 0.2                                      # faded, warm
+    a += rnd.normal(0, 9, a.shape[:2])[..., None]                                      # grain
+    v = 1 - 0.45 * np.clip(((xx - w / 2) / (w * 0.7)) ** 2 + ((yy - h / 2) / (h * 0.7)) ** 2, 0, 1)
+    return Image.fromarray(np.clip(a * v[..., None], 0, 255).astype(np.uint8))
+
 def make(c):
     bgr = grab(c['src'], c['t'], c.get('cx', 1240), c.get('zoom', 1.15))
     rgb = Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)).convert('RGBA')
     lay = c.get('layout', 'plain')
     if lay == 'plain':
         img = bottom_fade(rgb)
+    elif lay == 'memory2':                       # speaker untouched + blurred childhood photo falling apart
+        img = bottom_fade(rgb)
+        ph = child_photo()
+        card = Image.new('RGBA', (ph.width + 36, ph.height + 100), (244, 240, 228, 255)); card.paste(ph, (18, 18))
+        card = disintegrate(card, start=0.5, block=9).rotate(c.get('memory_rot', 8), resample=Image.BICUBIC, expand=True)
+        sh = Image.new('RGBA', img.size, (0, 0, 0, 0)); a = np.asarray(card)[..., 3]
+        sh.paste(Image.new('RGBA', card.size, (0, 0, 0, 120)), (c.get('memory_x', 10) + 12, c.get('memory_y', 120) + 16), Image.fromarray(a))
+        img.alpha_composite(sh.filter(ImageFilter.GaussianBlur(14)))
+        img.alpha_composite(card, (c.get('memory_x', 10), c.get('memory_y', 120)))
     else:
         m = matte(bgr)
         person = rgb.copy(); person.putalpha(Image.fromarray((m * 255).astype(np.uint8)))
