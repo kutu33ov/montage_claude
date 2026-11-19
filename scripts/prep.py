@@ -69,7 +69,8 @@ for t in np.arange(0, dur, 1.0):
     fs = cc.detectMultiScale(g, 1.1, 6, minSize=(60, 60))
     if len(fs):
         x, y, w, h = max(fs, key=lambda r: r[2] * r[3])
-        faces.append((float(t), float(x + w / 2) / sw, float(y + h / 2) / sw, float(w) / sw))
+        if w / sw > f.shape[1] * 0.11:   # drop small false hits (clocks, plates on the wall)
+            faces.append((float(t), float(x + w / 2) / sw, float(y + h / 2) / sw, float(w) / sw))
 json.dump(faces, open(f'{proj}/faces.json', 'w'))
 
 # 6. config skeleton
