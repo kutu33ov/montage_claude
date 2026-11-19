@@ -30,6 +30,21 @@ words = [w for w in words if w['t']]
 # ---------- keep intervals (cut pauses by audio silence) ----------
 sil = json.load(open(G['silences']))
 parts = sh.get('parts') or [[sh['start'], sh['end']]]
+# never clip the last word of a part: whisper end times are early, extend to word end + 0.25 s
+_all = sorted((w for seg in tr for w in seg['words']), key=lambda w: w['s'])
+_sil = json.load(open(G['silences']))
+for p_ in parts:
+    pe0 = p_[1]
+    for i_, w_ in enumerate(_all):
+        if w_['s'] < pe0 < w_['e'] + 0.25 and w_['s'] < pe0 - 0.05:   # only the word the part ends on
+            # end where the voice really goes quiet after this word; else word end + small tail
+            q = [a for a, b in _sil if w_['e'] - 0.1 <= a <= w_['e'] + 0.6]
+            if q: end = q[0] + 0.15
+            else:
+                nxt = _all[i_ + 1]['s'] if i_ + 1 < len(_all) else w_['e'] + 0.25
+                end = min(w_['e'] + 0.25, nxt - 0.02)      # no pause: don't swallow the next word
+            p_[1] = max(pe0, end)
+            break
 sh['start'], sh['end'] = min(p[0] for p in parts), max(p[1] for p in parts)
 keeps = []
 for ps, pe in parts:
@@ -102,7 +117,9 @@ for i, (s, e, z) in enumerate(plan):
     d = e - s; fa = min(0.012, d / 4)
     aparts.append(f"[0:a]atrim={s:.3f}:{e:.3f},asetpts=PTS-STARTPTS,afade=t=in:d={fa:.3f},afade=t=out:st={d - fa:.3f}:d={fa:.3f}[a{i}]")
     labels.append(f"[a{i}]")
-aparts.append(f"{''.join(labels)}concat=n={len(plan)}:v=0:a=1,loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[aout]")
+_tot = sum(e - s for s, e, z in plan)
+_end = '' if sh.get('loop', G.get('loop', False)) else f",afade=t=out:st={max(0, _tot - 0.2):.3f}:d=0.2"   # soft end, no click
+aparts.append(f"{''.join(labels)}concat=n={len(plan)}:v=0:a=1{_end},loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[aout]")
 ass_path = f"{G['workdir']}/{sh['id']}.ass"
 
 # ---------- captions (ASS) ----------

@@ -153,19 +153,19 @@ def cheek_ref(img, box):
         if len(ycc) > 20: vals.append(np.median(ycc[:, 1:], 0))
     return np.mean(vals, 0) if vals else None
 
-def fix_nose_red(img, box, ref, warmth=2.5, strength=1.0):
+def fix_nose_red(img, box, ref, warmth=2.5, strength=1.0, zone='nose_wide', lip_y=None):
     """Pull every pixel of the nose area that is redder than the cheeks (+warmth) down to the cheek tone.
     Works on the whole nose above the lips, so it doesn't depend on exactly where the tip is."""
     if box is None or ref is None: return img
     H, W = img.shape[:2]; x, y, w, h = box
-    zx, zy, zw, zh = ZONES['nose_wide']
+    zx, zy, zw, zh = ZONES[zone] if isinstance(zone, str) else zone
     cx, cy, ax, ay = x + zx * w, y + zy * h, zw * w, zh * h
     X0, Y0, X1, Y1 = int(max(cx - ax * 1.2, 0)), int(max(cy - ay * 1.2, 0)), int(min(cx + ax * 1.2, W)), int(min(cy + ay * 1.2, H))
     roi = img[Y0:Y1, X0:X1]
     if roi.shape[0] < 10 or roi.shape[1] < 10: return img
     ell = np.zeros(roi.shape[:2], np.float32)
     cv2.ellipse(ell, (int(cx - X0), int(cy - Y0)), (int(ax), int(ay)), 0, 0, 360, 1.0, -1)
-    lip = int(y + 0.70 * h) - Y0                       # never touch the lips
+    lip = int(lip_y if lip_y is not None else y + 0.70 * h) - Y0     # never touch the lips
     if lip < ell.shape[0]: ell[max(lip, 0):] = 0
     ell = cv2.GaussianBlur(ell, (0, 0), max(ax, ay) * 0.12)
     ycc = cv2.cvtColor(roi, cv2.COLOR_BGR2YCrCb).astype(np.float32)
@@ -183,76 +183,76 @@ def fix_nose_red(img, box, ref, warmth=2.5, strength=1.0):
 
 
 class Retoucher:
-    """Temporally stable retouch for video: face box detected every frame and smoothed (EMA); if detection
-    fails the last box is held (no on/off flicker on fast moves); the cheek reference tone is smoothed over
-    time; the nose is pulled to the cheek tone every frame (whole nose above the lips) + small dots removed."""
+    """Temporally stable video retouch. Face + 5 landmarks from YuNet EVERY frame (works on 3/4 / side views,
+    which the frontal Haar detector missed); box and landmarks smoothed (EMA) and held for up to 1.5 s if
+    the face is briefly lost. The nose area is centred on the nose-tip landmark and pulled to the cheek tone
+    (+warmth, never pale); small red dots removed; lips excluded using the mouth-corner landmarks."""
 
     def __init__(self, cfg=None, ema=0.6, ref_ema=0.1, size=None):
         self.cfg = cfg or {}
         self.ema, self.ref_ema = ema, ref_ema
-        self.box = None; self.ref = None; self.lost = 0; self.pgray = None
-        self.size = size; self.pending = None; self.pend_box = None
-
-    def flow_shift(self, gray):
-        """median optical-flow displacement of feature points inside the last box (prev -> current frame)"""
-        if self.pgray is None or self.box is None: return None
-        x, y, w, h = self.box
-        mask = np.zeros_like(self.pgray)
-        mask[int(max(y, 0)):int(y + h), int(max(x, 0)):int(x + w)] = 255
-        pts = cv2.goodFeaturesToTrack(self.pgray, 80, 0.01, 6, mask=mask)
-        if pts is None or len(pts) < 6: return None
-        nxt, st, _ = cv2.calcOpticalFlowPyrLK(self.pgray, gray, pts, None, winSize=(21, 21), maxLevel=3)
-        ok = st.ravel() == 1
-        if ok.sum() < 6: return None
-        d = (nxt[ok] - pts[ok]).reshape(-1, 2)
-        return np.median(d, 0)
+        self.box = None; self.lm = None; self.ref = None; self.lost = 0; self.pgray = None
 
     def track(self, img):
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        b = detect_face(img)
-        sh = self.flow_shift(gray)
-        if b is not None and self.size is not None and not 0.72 < b[2] / self.size < 1.38:
-            b = None                                  # false detection (wrong size) — ignore it
-        if b is not None and self.box is not None and np.abs(np.asarray(b[:2]) - self.box[:2]).max() > b[2] * 0.6:
-            # big jump: accept only if it repeats for 3 frames (real cut / fast move), else treat as noise
-            self.pending = self.pending + 1 if self.pending is not None and np.abs(np.asarray(b[:2]) - self.pend_box[:2]).max() < b[2] * 0.3 else 1
-            self.pend_box = np.asarray(b, np.float64)
-            if self.pending < 3: b = None
-        else:
-            self.pending = None
+        b, lm = yunet_detect(img)
         if b is None:
-            # frontal detector lost the face (head turn, motion blur): follow it by optical flow
-            if self.box is not None and sh is not None:
-                self.box = self.box + np.array([sh[0], sh[1], 0, 0])
-                self.lost += 1
-            elif self.box is not None:
-                self.lost += 1
-            if self.lost > 90: self.box = None
-            self.pgray = gray
+            self.lost += 1
+            if self.lost > 45: self.box = self.lm = None
             return self.box
         self.lost = 0
-        b = np.asarray(b, np.float64)
-        self.size = b[2] if self.size is None else self.size * 0.9 + b[2] * 0.1
         if self.box is None or np.abs(b[:2] - self.box[:2]).max() > b[2] * 0.6:
-            self.box = b; self.pending = None
+            self.box, self.lm = b, lm
         else:
-            pred = self.box + (np.array([sh[0], sh[1], 0, 0]) if sh is not None else 0)
-            self.box = pred * (1 - self.ema) + b * self.ema
-        self.pgray = gray
+            self.box = self.box * (1 - self.ema) + b * self.ema
+            self.lm = self.lm * (1 - self.ema) + lm * self.ema
         return self.box
 
     def __call__(self, img):
         box = self.track(img)
         if box is None: return img
+        x, y, w, h = box; lm = self.lm
         k = self.cfg.get('skin', 0.5)
-        out = smooth_skin(img, box, k, 1, 0.6) if k else img.copy()
-        r = cheek_ref(out, box)
+        # smooth_skin expects a Haar-like box (bigger, includes forehead): expand the YuNet box a bit
+        hb = np.array([x - 0.08 * w, y - 0.12 * h, w * 1.16, h * 1.12])
+        out = smooth_skin(img, hb, k, 1, 0.6) if k else img.copy()
+        r = cheek_ref_lm(out, box, lm)
         if r is not None:
             self.ref = r if self.ref is None else self.ref * (1 - self.ref_ema) + r * self.ref_ema
+        tip = lm[2]
+        zone = ((tip[0] - x) / w, (tip[1] - y) / h - 0.04, 0.24, 0.17)        # nose area around the tip
+        lip_y = min(lm[3][1], lm[4][1]) - 0.05 * h
         if self.cfg.get('nose_red', True):
-            out = fix_nose_red(out, box, self.ref, self.cfg.get('warmth', 2.5))
-        for z in self.cfg.get('zones', []):
-            if z != 'nose_tip': out = fix_zone(out, box, z)
-        for z in self.cfg.get('spots', ['nose_wide']):
-            out = fix_spots(out, box, z, strength=1.2)
+            out = fix_nose_red(out, box, self.ref, self.cfg.get('warmth', 2.5), zone=zone, lip_y=lip_y)
+        if self.cfg.get('spots', ['nose_wide']):
+            out = fix_spots(out, box, zone, strength=1.2)
         return out
+
+_yunet = None
+def yunet_detect(img):
+    """YuNet (works on 3/4 and side views). Returns (box[x,y,w,h], landmarks 5x2: r-eye, l-eye, nose tip,
+    r-mouth, l-mouth) of the largest face, or (None, None)."""
+    global _yunet
+    import os
+    H, W = img.shape[:2]
+    if _yunet is None:
+        here = os.path.dirname(os.path.abspath(__file__))
+        mp = os.path.join(here, '..', 'models', 'yunet', 'face_detection_yunet_2023mar.onnx')
+        _yunet = cv2.FaceDetectorYN.create(mp, '', (W, H), 0.6, 0.3, 50)
+    _yunet.setInputSize((W, H))
+    _, f = _yunet.detect(img)
+    if f is None or not len(f): return None, None
+    f = max(f, key=lambda r: r[2] * r[3])
+    return np.array(f[:4], np.float64), np.array(f[4:14], np.float64).reshape(5, 2)
+
+def cheek_ref_lm(img, box, lm):
+    """skin tone below each eye, above the mouth corner (beard and shadows excluded)"""
+    w = box[2]; vals = []
+    for eye, mouth in ((lm[0], lm[3]), (lm[1], lm[4])):
+        cx = eye[0] + (eye[0] - lm[2][0]) * 0.15; cy = eye[1] * 0.45 + mouth[1] * 0.55
+        r = w * 0.07
+        p = img[int(max(cy - r, 0)):int(cy + r), int(max(cx - r, 0)):int(cx + r)]
+        if p.size == 0: continue
+        ycc = cv2.cvtColor(p, cv2.COLOR_BGR2YCrCb).reshape(-1, 3).astype(np.float32)
+        ycc = ycc[(ycc[:, 0] > 85) & (ycc[:, 1] > 130) & (ycc[:, 1] < 185)]
+        if len(ycc) > 25: vals.append(np.median(ycc[:, 1:], 0))
+    return np.median(vals, 0) if vals else None

@@ -64,9 +64,9 @@ Per short in config.json (anchor by `"word"`, source time `"at"` or output time 
   The owner will write his own music — always prefer his tracks.
 - `lut` — `warm` | `cool` | `contrast` | `film` (`assets/luts`, regenerate with `scripts/gen_luts.py`).
 - `retouch` — `{"skin": 0.5, "nose_red": true, "warmth": 2.5, "spots": ["nose_wide"], "zones": []}`
-  (global or per short; covers take it too). Video uses `skin.Retoucher`: face tracked EVERY frame (Haar +
-  optical-flow fallback, false detections of the wrong size rejected, jumps confirmed over 3 frames) so the
-  retouch never drops out on fast head moves; the whole nose above the lips is pulled to the CHEEK tone
+  (global or per short; covers take it too). Video uses `skin.Retoucher`: YuNet face + landmarks EVERY frame
+  (works on 3/4 and side views — the frontal Haar detector missed them and the pimple showed), smoothed and
+  held through short dropouts; the nose area is centred on the nose-tip landmark and pulled to the CHEEK tone
   (+warmth so it's never pale); small red dots removed (`spots`). Extra redness zones (`forehead`,
   `cheek_left`…) via `zones`. The owner checks the nose tip frame by frame — verify with a nose contact
   sheet over the whole short (uniform frames + fastest-motion frames) before sending.
