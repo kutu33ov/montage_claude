@@ -19,6 +19,22 @@ recommendation first, based on the transcript:
 6. **Переходы** — transition effects or plain cuts? (He dislikes glitch and shake; offer whip / zoom / flash / none.)
 Then render with the answers. If he already answered some of these in his message, don't ask them again.
 
+## THE STANDARD (owner, Nov 20 2026: «95% всё хорошо, без ошибок, склейка очень хорошая — делай так всегда»)
+The 12-video outdoor batch (projects v7_*) is the reference. What made it good — always do this:
+1. Transcribe with VAD + no conditioning (scripts/transcribe.py) so every retake is a separate line.
+2. Read the whole transcript; for each video keep ONE complete thought. Short clips (15–35 s) that are
+   complete are shorts too — never skip a video because it is short; ask if unsure.
+3. Keep only the LAST complete take of every phrase; drop abandoned starts and «продолжение следует».
+4. Prefer few large parts in the original order; cut only whole phrases. Let make_short cut the pauses.
+5. Before rendering, print and READ the final caption text of every short end to end: no repeats, no
+   cut words, no missing words, the meaning flows from hook to conclusion.
+6. Render with: fps 60, crf 17, punch-in 1.12 + drift 0.06, no transitions, light-red terms, quiet music,
+   retouch {skin 0, tone 0.2, nose_red, spots}. Native vertical sources are used as is (no upscaling).
+7. **Every video starts smoothly, without abrupt cuts:** the first ~3 s have no jump cuts and no punch-in
+   (`smooth_start`, default 3.0 s — small pauses in the opening stay in).
+8. Run ONE render queue at a time (two runners once wrote the same file and corrupted it); after
+   rendering, decode-check every file before sending (`ffmpeg -v error -i f -f null -`).
+
 ## Setup in a fresh session
 1. `bash setup.sh` (pip deps, Inter fonts, ~1.6 GB whisper model into `./models`). In the `montage_claude`
    cloud environment this runs automatically at session start.

@@ -81,6 +81,15 @@ keeps = [k for k in keeps if k[1] - k[0] > 0.12]
 # drop pieces where nothing is said (a lone second of silence with a punch-in looks like a glitch)
 _ww = [w for seg in tr for w in seg['words']]
 keeps = [k for k in keeps if any(w['s'] < k[1] - 0.05 and w['e'] > k[0] + 0.05 for w in _ww)]
+# smooth opening (owner's rule): no jump cuts in the first seconds — small pauses there stay in
+_SMOOTH = sh.get('smooth_start', G.get('smooth_start', 3.0))
+_m, _acc = [], 0.0
+for k in keeps:
+    if _m and _acc < _SMOOTH and k[0] - _m[-1][1] < 0.9:
+        _acc += k[1] - _m[-1][1]; _m[-1] = [_m[-1][0], k[1]]
+    else:
+        _m.append(list(k)); _acc += k[1] - k[0]
+keeps = _m
 # captions only for words that are actually heard (manual cuts remove repeats like «и и», «слишком слишком»)
 words = [w for w in words if not any(c[0] <= (w['s'] + w['e']) / 2 <= c[1] for c in sh.get('cut', []))]
 # glue split-off parts back on: «когда» + «-нибудь» -> «когда-нибудь», «какую» + «-то» -> «какую-то»
@@ -120,7 +129,7 @@ def zoom_box(z):
 plan, zoomed = [], False
 for i, (s, e) in enumerate(keeps):
     # punch-in toggles on jump cuts (skip after very short bits to avoid flicker)
-    if i > 0 and keeps[i-1][1] - keeps[i-1][0] > 0.8: zoomed = not zoomed
+    if i > 0 and keeps[i-1][1] - keeps[i-1][0] > 0.8 and sum(e - s for s, e in keeps[:i]) >= _SMOOTH: zoomed = not zoomed   # no punch-in in the opening
     plan.append((s, e, ZOOM if zoomed else 1.0))
 LOOP = sh.get('loop', G.get('loop', False))
 if LOOP and plan:   # endless video: the last frame must look like the first one
