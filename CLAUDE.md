@@ -91,7 +91,12 @@ on every cut. All bundled sounds/music/LUTs are synthesised by `gen_sfx.py` / `g
   ("и вот это проблема номер один", "продолжение следует").
 - No repetitions inside a short (same phrase/term said twice → cut one). Use `parts` to stitch.
 - Watch for retakes: whisper may skip a repeated take (a word stretched over many seconds = suspicious) —
-  re-transcribe that stretch alone and pick the better take.
+  re-transcribe that stretch alone and pick the better take. transcribe.py now uses VAD and no previous-text
+  conditioning so retakes show up as separate lines (Nov 2026: «Но почему мы снова и снова…» was said twice
+  and slipped into a short). Before rendering, READ the final caption text of every short end to end:
+  no repeated phrases, no sentence cut mid-way, every part ends on a full phrase, the meaning flows.
+- Never leave pieces with no speech: make_short drops keep-segments without words (a 1 s silent piece with
+  a punch-in looked like a glitch to the owner).
 - ≤60 s preferred; up to ~70 s is fine if the thought needs it.
 **Edit**
 - Pauses cut by audio silence (not whisper timestamps). Punch-in zoom 1.12 toggles on jump cuts.

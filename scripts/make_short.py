@@ -75,6 +75,9 @@ for c in sh.get('cut', []):  # manual cuts [a,b] in source time
             if e > c[1]: new.append([c[1], e])
     keeps = new
 keeps = [k for k in keeps if k[1] - k[0] > 0.12]
+# drop pieces where nothing is said (a lone second of silence with a punch-in looks like a glitch)
+_ww = [w for seg in tr for w in seg['words']]
+keeps = [k for k in keeps if any(w['s'] < k[1] - 0.05 and w['e'] > k[0] + 0.05 for w in _ww)]
 # captions only for words that are actually heard (manual cuts remove repeats like «и и», «слишком слишком»)
 words = [w for w in words if not any(c[0] <= (w['s'] + w['e']) / 2 <= c[1] for c in sh.get('cut', []))]
 # glue split-off parts back on: «когда» + «-нибудь» -> «когда-нибудь», «какую» + «-то» -> «какую-то»
