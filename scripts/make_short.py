@@ -33,8 +33,10 @@ words = [w for w in words if w['t'] and w['e'] - w['s'] >= 0.04]
 sil = json.load(open(G['silences']))
 # outdoors (wind / street) silencedetect finds almost nothing: also treat gaps between words as pauses
 _ws = sorted((w for seg in tr for w in seg['words']), key=lambda w: w['s'])
-_gaps = [[a['e'] + 0.05, b['s'] - 0.05] for a, b in zip(_ws, _ws[1:]) if b['s'] - a['e'] > 0.45]
-sil = sorted(sil + [g for g in _gaps if not any(x[0] <= g[0] and g[1] <= x[1] for x in sil)])
+# only when silencedetect found almost nothing (wind/street) — indoors it made extra choppy cuts
+if _ws and len(sil) < 4 * (_ws[-1]['e'] - _ws[0]['s']) / 60:
+    _gaps = [[a['e'] + 0.12, b['s'] - 0.08] for a, b in zip(_ws, _ws[1:]) if b['s'] - a['e'] > 0.6]
+    sil = sorted(sil + [g for g in _gaps if not any(x[0] <= g[0] and g[1] <= x[1] for x in sil)])
 parts = sh.get('parts') or [[sh['start'], sh['end']]]
 # never clip the last word of a part: whisper end times are early, extend to word end + 0.25 s
 _all = sorted((w for seg in tr for w in seg['words']), key=lambda w: w['s'])
