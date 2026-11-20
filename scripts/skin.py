@@ -125,9 +125,13 @@ def fix_spots(img, box, zone='nose', strength=1.0):
     Y, Cr, Cb = ycc[..., 0], ycc[..., 1], ycc[..., 2]
     skin = ((Y > 60) & (Cr > 132) & (Cr < 190)).astype(np.float32)
     k = max(5, int(w * 0.16)) | 1                       # "surroundings" scale ≈ a few spot sizes
-    base_cr = cv2.medianBlur(np.clip(Cr, 0, 255).astype(np.uint8), k).astype(np.float32)
-    base_cb = cv2.medianBlur(np.clip(Cb, 0, 255).astype(np.uint8), k).astype(np.float32)
-    base_y = cv2.medianBlur(np.clip(Y, 0, 255).astype(np.uint8), k).astype(np.float32)
+    # surroundings = skin only: in side views the wall behind the nose pulled the colour to yellow-grey
+    sb = skin > 0
+    if sb.sum() < 30: return img
+    fill = lambda ch: np.where(sb, ch, np.median(ch[sb])).astype(np.float32)
+    base_cr = cv2.medianBlur(np.clip(fill(Cr), 0, 255).astype(np.uint8), k).astype(np.float32)
+    base_cb = cv2.medianBlur(np.clip(fill(Cb), 0, 255).astype(np.uint8), k).astype(np.float32)
+    base_y = cv2.medianBlur(np.clip(fill(Y), 0, 255).astype(np.uint8), k).astype(np.float32)
     d = Cr - base_cr
     m = np.clip((d - 1.0) / 3.0, 0, 1) * skin * ell
     m = cv2.dilate(m, np.ones((3, 3), np.uint8))
@@ -176,7 +180,7 @@ def fix_nose_red(img, box, ref, warmth=2.5, strength=1.0, zone='nose_wide', lip_
     ex = Cr - tcr
     m = np.clip(ex / 5.0, 0, 1) * sk * ell
     m = cv2.GaussianBlur(m, (0, 0), max(1.5, w * 0.01)) * strength
-    ycc[..., 1] = Cr - m * np.clip(ex, 0, None)
+    ycc[..., 1] = Cr - m * np.clip(ex, 0, 9)           # cap the shift: bigger pulls turned the nose yellow-green
     # Cb is left alone: pushing it towards the cheeks added blue patches
     img[Y0:Y1, X0:X1] = cv2.cvtColor(np.clip(ycc, 0, 255).astype(np.uint8), cv2.COLOR_YCrCb2BGR)
     return img
@@ -220,7 +224,17 @@ class Retoucher:
             if fr is not None:
                 self.fref = fr if getattr(self, 'fref', None) is None else self.fref * 0.9 + fr * 0.1
             out = even_tone(out, box, getattr(self, 'fref', None), self.cfg['tone'])
-        r = cheek_ref_lm(out, box, lm)
+        er, el, tp = lm[0], lm[1], lm[2]; ed = max(np.linalg.norm(el - er), 1)
+        profile = abs((tp[0] - er[0]) - (el[0] - tp[0])) / ed > 0.35       # 3/4 or side view: one cheek is hidden
+        r = forehead_ref(out, box, lm) if profile else cheek_ref_lm(out, box, lm)
+        # never aim below the face's own typical skin tone (side views: forehead/cheek samples hit the wall)
+        X0, Y0 = int(max(x, 0)), int(max(y, 0)); fb = out[Y0:int(y + h), X0:int(x + w)]
+        if fb.size:
+            fy = cv2.cvtColor(fb, cv2.COLOR_BGR2YCrCb).reshape(-1, 3).astype(np.float32)
+            fy = fy[(fy[:, 0] > 80) & (fy[:, 1] > 140) & (fy[:, 1] < 185)]
+            if len(fy) > 100:
+                med = np.median(fy[:, 1:], 0)
+                r = med - [3, 0] if r is None else np.array([max(r[0], med[0] - 3), r[1]])
         if r is not None:
             self.ref = r if self.ref is None else self.ref * (1 - self.ref_ema) + r * self.ref_ema
         tip = lm[2]
