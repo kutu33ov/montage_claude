@@ -95,6 +95,8 @@ on every cut. All bundled sounds/music/LUTs are synthesised by `gen_sfx.py` / `g
   conditioning so retakes show up as separate lines (Nov 2026: «Но почему мы снова и снова…» was said twice
   and slipped into a short). Before rendering, READ the final caption text of every short end to end:
   no repeated phrases, no sentence cut mid-way, every part ends on a full phrase, the meaning flows.
+- The owner often starts the sentence over when he stumbles: always keep only the LAST complete take,
+  drop the abandoned starts.
 - Never leave pieces with no speech: make_short drops keep-segments without words (a 1 s silent piece with
   a punch-in looked like a glitch to the owner).
 - ≤60 s preferred; up to ~70 s is fine if the thought needs it.

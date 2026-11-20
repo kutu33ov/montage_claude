@@ -260,7 +260,7 @@ def render():
                     fr = rt(fr)          # tracked every frame, corrections fade out slowly (skin.Retoucher)
                 dr = G.get('drift', 0.0)        # dynamics without transitions: slow push-in within every segment
                 if dr: zx, zy, zw, zh = zoom_box(z * (1 + dr * k / max(n - 1, 1)))
-                last = cv2.resize(fr[zy:zy + zh, zx:zx + zw], (OUT_W, OUT_H), interpolation=cv2.INTER_CUBIC)
+                last = cv2.resize(fr[zy:zy + zh, zx:zx + zw], (OUT_W, OUT_H), interpolation=cv2.INTER_LANCZOS4)
             if last is not None:
                 outf = fx.apply(last.copy(), written / FPS)
                 if first is None: first = outf.copy()
