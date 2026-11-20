@@ -27,7 +27,9 @@ for w in words:
     key = re.sub(r'[^\w\-]', '', w['w'].lower())
     w['t'] = fixes.get(key, re.sub(r'[.,!?…«»"]', '', w['w']).lower())
 # drop words mapped to empty string (e.g. merged pairs like "тик"+"ток") and zero-length hallucinations
-words = [w for w in words if w['t'] and w['e'] - w['s'] >= 0.04]
+for w in words:                 # VAD transcripts give some real words zero length: keep them, give a short span
+    if w['e'] - w['s'] < 0.04: w['e'] = w['s'] + 0.15
+words = [w for w in words if w['t'] and w['t'] not in ('продолжение', 'следует', 'следует...')]
 
 # ---------- keep intervals (cut pauses by audio silence) ----------
 sil = json.load(open(G['silences']))
@@ -43,8 +45,9 @@ _all = sorted((w for seg in tr for w in seg['words']), key=lambda w: w['s'])
 _sil = json.load(open(G['silences']))
 for p_ in parts:
     pe0 = p_[1]
-    for i_, w_ in enumerate(_all):
-        if w_['s'] < pe0 < w_['e'] + 0.25 and w_['s'] < pe0 - 0.05:   # only the word the part ends on
+    _last = max((i for i, w in enumerate(_all) if w['s'] < pe0 - 0.05), default=None)   # the word the part ends on
+    for i_, w_ in ([(_last, _all[_last])] if _last is not None else []):
+        if pe0 < w_['e'] + 0.25:
             # end where the voice really goes quiet after this word; else word end + small tail
             q = [a for a, b in _sil if w_['e'] - 0.1 <= a <= w_['e'] + 0.6]
             if q: end = q[0] + 0.15
@@ -65,7 +68,7 @@ for ps, pe in parts:
         cur = max(cur, b2)
     if cur < pe: keeps.append([cur, pe])
 # only words that belong to the chosen parts
-words = [w for w in words if any(ps <= (w['s'] + w['e']) / 2 <= pe or ps <= w['e'] - 0.1 <= pe and w['s'] >= ps - 0.3 for ps, pe in parts)]
+words = [w for w in words if any(w['s'] >= ps - 0.08 and (w['s'] + w['e']) / 2 <= pe + 0.05 for ps, pe in parts)]
 for c in sh.get('cut', []):  # manual cuts [a,b] in source time
     new = []
     for s, e in keeps:
@@ -83,7 +86,7 @@ words = [w for w in words if not any(c[0] <= (w['s'] + w['e']) / 2 <= c[1] for c
 # glue split-off parts back on: «когда» + «-нибудь» -> «когда-нибудь», «какую» + «-то» -> «какую-то»
 glued = []
 for w in words:
-    if glued and w['t'].startswith('-'):
+    if glued and w['t'].startswith('-') and w['s'] - glued[-1]['e'] < 0.4:
         glued[-1] = dict(glued[-1], t=glued[-1]['t'] + w['t'], e=w['e'])
     else:
         glued.append(w)
