@@ -75,6 +75,11 @@ Per short in config.json (anchor by `"word"`, source time `"at"` or output time 
   must loop too: end on a phrase that leads into the opening line (e.g. end «…ролик, который тоже начался
   с вопроса, рассчитанного на то, чтобы тебя зацепить» → start «Ты заметил, что интернет…»).
 - `fx.progress_bar`, `fx.watermark` ("@nick") — off by default.
+- `terms` — list of terms (global or per short) coloured light red (`term_color`, default FF6B6B) in the captions;
+  word forms match by stem, multi-word terms colour every word. The owner wants terms highlighted.
+- `drift` — slow push-in within every segment (e.g. 0.06) = «больше динамики» without transitions.
+  Owner's current default (Nov 2026): punch-in zoom on cuts + drift 0.06, NO transitions (`fx.auto: false`).
+- `fps` / `crf` / `maxrate` — 60 for 60 fps phone footage; output is BT.709-tagged, capped at 25 Mbps.
 End every part at least ~0.25 s after the last word's end time (whisper `e`), never on it — otherwise
 the last word gets clipped («подумай» was cut off).
 Taste: 1–3 accents per short (one emphasis, one insert/glitch, a ding on the punchline). Don't put a sound

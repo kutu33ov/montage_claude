@@ -157,6 +157,20 @@ for i, w in enumerate(words):
     cur.append(w)
 if cur: groups.append(cur)
 
+# terms highlighted in light red: "terms": ["эффект невозвратных затрат", "прожектора", ...] (global or per short).
+# A multi-word term colours every word of the matched sequence (it may span caption lines).
+_c = G.get('term_color', 'FF6B6B'); TERM_ON = '{\\c&H' + _c[4:6] + _c[2:4] + _c[0:2] + '&}'; TERM_OFF = '{\\c&HFFFFFF&}'
+_terms = [t.lower().split() for t in (G.get('terms', []) + sh.get('terms', []))]
+_flat = [(gi, k) for gi, g in enumerate(groups) for k in range(len(g))]
+_lw = [re.sub(r'[^\w-]', '', groups[gi][k]['t'].lower()) for gi, k in _flat]
+_hit = set()
+for term in _terms:
+    stem = [w[:max(4, len(w) - 2)] if len(w) > 4 else w for w in term]     # match Russian word forms
+    for i in range(len(_lw) - len(term) + 1):
+        if all(_lw[i + j].startswith(stem[j]) for j in range(len(term))):
+            _hit.update(_flat[i + j] for j in range(len(term)))
+def is_term(gi, k): return (gi, k) in _hit
+
 ev = []
 for gi, g in enumerate(groups):
     a = src2out(g[0]['s']); b = src2out(g[-1]['e']) + 0.08
@@ -167,7 +181,8 @@ for gi, g in enumerate(groups):
     if b - a < 0.05: continue
     txt = ' '.join(x['t'] for x in g)
     fs = f"{{\\fs{int(78 * 18 / len(txt))}}}" if len(txt) > 18 else ''   # long line: shrink instead of wrapping
-    ev.append(f"Dialogue: 0,{ts(a)},{ts(b)},Cap,,0,0,0,,{fs}{txt}")
+    shown = ' '.join((TERM_ON + x['t'] + TERM_OFF) if is_term(gi, k) else x['t'] for k, x in enumerate(g))
+    ev.append(f"Dialogue: 0,{ts(a)},{ts(b)},Cap,,0,0,0,,{fs}{shown}")
 hook = sh.get('hook')
 if LOOP and not sh.get('hook_in_loop', False): hook = None   # a title popping up on every loop gives the seam away
 if hook:
@@ -238,6 +253,8 @@ def render():
                 fr = np.frombuffer(buf, np.uint8).reshape(SRC_H, cw, 3).copy()
                 if G.get('skin', True):
                     fr = rt(fr)          # tracked every frame, corrections fade out slowly (skin.Retoucher)
+                dr = G.get('drift', 0.0)        # dynamics without transitions: slow push-in within every segment
+                if dr: zx, zy, zw, zh = zoom_box(z * (1 + dr * k / max(n - 1, 1)))
                 last = cv2.resize(fr[zy:zy + zh, zx:zx + zw], (OUT_W, OUT_H), interpolation=cv2.INTER_CUBIC)
             if last is not None:
                 outf = fx.apply(last.copy(), written / FPS)
