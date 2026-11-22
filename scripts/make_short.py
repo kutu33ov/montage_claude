@@ -65,7 +65,7 @@ for ps, pe in parts:
     for a, b in sil:
         if b <= ps or a >= pe: continue
         a2, b2 = a + PAD_OUT, b - PAD_IN          # leave a little air around speech
-        if b2 - a2 < 0.10: continue
+        if b2 - a2 < max(0.10, sh.get('min_pause', G.get('min_pause', 0.25)) - 0.17): continue   # short breaths stay in = fewer jump cuts
         if a2 > cur: keeps.append([cur, min(a2, pe)])
         cur = max(cur, b2)
     if cur < pe: keeps.append([cur, pe])
