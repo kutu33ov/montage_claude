@@ -44,6 +44,7 @@ parts = sh.get('parts') or [[sh['start'], sh['end']]]
 _all = sorted((w for seg in tr for w in seg['words']), key=lambda w: w['s'])
 _sil = json.load(open(G['silences']))
 for p_ in parts:
+    if len(p_) > 2: continue        # [a, b, "exact"]: owner-checked end, never extend
     pe0 = p_[1]
     _last = max((i for i, w in enumerate(_all) if w['s'] < pe0 - 0.05), default=None)   # the word the part ends on
     for i_, w_ in ([(_last, _all[_last])] if _last is not None else []):
@@ -56,6 +57,7 @@ for p_ in parts:
                 end = min(w_['e'] + 0.25, nxt - 0.02)      # no pause: don't swallow the next word
             p_[1] = max(pe0, end)
             break
+parts = [p_[:2] for p_ in parts]   # drop the "exact" flags after extension
 sh['start'], sh['end'] = min(p[0] for p in parts), max(p[1] for p in parts)
 keeps = []
 for ps, pe in parts:
