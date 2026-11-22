@@ -10,6 +10,7 @@ import numpy as np
 cfg_all = json.load(open(sys.argv[1]))
 G = cfg_all['global']
 sh = next(s for s in cfg_all['shorts'] if s['id'] == sys.argv[2])
+if sh.get('parts'): sh['start'], sh['end'] = min(p[0] for p in sh['parts']), max(p[1] for p in sh['parts'])
 
 SRC, OUT_W, OUT_H, FPS = G['src'], 1080, 1920, int(G.get('fps', 30))
 _wh = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height',

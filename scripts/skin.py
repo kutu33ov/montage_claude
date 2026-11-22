@@ -204,7 +204,22 @@ class Retoucher:
             if self.lost > 45: self.box = self.lm = None
             return self.box
         self.lost = 0
-        if self.box is None or np.abs(b[:2] - self.box[:2]).max() > b[2] * 0.6:
+        if self.box is not None:
+            jump = np.abs(b[:2] - self.box[:2]).max() > self.box[2] * 0.35
+            resize = not 0.75 < b[2] / self.box[2] < 1.33
+            if jump or resize:
+                # a hand in front of the face / false detection: hold the old box; accept the new place only
+                # if it stays there for 6 frames (otherwise the retouch patch jumped — the "chroma key" glitch)
+                pb = getattr(self, 'pend', None)
+                if pb is not None and np.abs(b[:2] - pb[:2]).max() < b[2] * 0.15:
+                    self.pend_n += 1
+                else:
+                    self.pend, self.pend_n = b, 1
+                if self.pend_n < 6: return self.box
+                self.box, self.lm, self.pend = b, lm, None
+                return self.box
+            self.pend = None
+        if self.box is None:
             self.box, self.lm = b, lm
         else:
             self.box = self.box * (1 - self.ema) + b * self.ema
