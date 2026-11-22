@@ -32,9 +32,12 @@ The 12-video outdoor batch (projects v7_*) is the reference. What made it good �
    retouch {skin 0, tone 0.2, nose_red, spots}. Native vertical sources are used as is (no upscaling).
 7. **Every video starts smoothly, without abrupt cuts:** the first ~3 s have no jump cuts and no punch-in
    (`smooth_start`, default 3.0 s — small pauses in the opening stay in).
-8. Check the REAL frame rate of the source: the Nov-20 indoor batch (v6_*) is tagged 60 fps but every frame
-   is doubled (real 30) — render those at fps 30, otherwise the drift zoom judders («лагает»). Count
-   duplicate frames in ~600 source frames; ~50% duplicates = real 30 fps.
+8. CHECK THE SOURCE FIRST, before any work: native phone files (.MOV/HEVC, vertical, real 60 fps) give the
+   good result. The Nov-20 indoor batch (v6_*) came as re-encoded 1920×1080 H.264 «60 fps» with every frame
+   doubled and an IRREGULAR duplicate pattern — the judder was baked into the source; no render setting fixed
+   it (the owner confirmed: «проблема была в исходниках»). Count duplicate frames over ~120 source frames;
+   if there are many / the pattern is irregular, TELL THE OWNER and ask for the original phone files
+   (upload the .MOV to Drive as is, no editor/converter) instead of cutting it.
 9. Run ONE render queue at a time (two runners once wrote the same file and corrupted it); after
    rendering, decode-check every file before sending (`ffmpeg -v error -i f -f null -`).
 
