@@ -32,7 +32,10 @@ The 12-video outdoor batch (projects v7_*) is the reference. What made it good �
    retouch {skin 0, tone 0.2, nose_red, spots}. Native vertical sources are used as is (no upscaling).
 7. **Every video starts smoothly, without abrupt cuts:** the first ~3 s have no jump cuts and no punch-in
    (`smooth_start`, default 3.0 s — small pauses in the opening stay in).
-8. Run ONE render queue at a time (two runners once wrote the same file and corrupted it); after
+8. Check the REAL frame rate of the source: the Nov-20 indoor batch (v6_*) is tagged 60 fps but every frame
+   is doubled (real 30) — render those at fps 30, otherwise the drift zoom judders («лагает»). Count
+   duplicate frames in ~600 source frames; ~50% duplicates = real 30 fps.
+9. Run ONE render queue at a time (two runners once wrote the same file and corrupted it); after
    rendering, decode-check every file before sending (`ffmpeg -v error -i f -f null -`).
 
 ## Setup in a fresh session

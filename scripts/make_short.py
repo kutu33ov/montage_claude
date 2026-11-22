@@ -132,7 +132,9 @@ def zoom_box(z):
 plan, zoomed = [], False
 for i, (s, e) in enumerate(keeps):
     # punch-in toggles on jump cuts (skip after very short bits to avoid flicker)
-    if i > 0 and keeps[i-1][1] - keeps[i-1][0] > 0.8 and sum(e - s for s, e in keeps[:i]) >= _SMOOTH: zoomed = not zoomed   # no punch-in in the opening
+    # punch-in only on cuts that remove a real pause (>0.6 s) — tiny cuts stay plain, the picture doesn't jump around
+    big_cut = i > 0 and keeps[i][0] - keeps[i-1][1] > 0.6
+    if i > 0 and big_cut and keeps[i-1][1] - keeps[i-1][0] > 0.8 and sum(e - s for s, e in keeps[:i]) >= _SMOOTH: zoomed = not zoomed   # no punch-in in the opening
     plan.append((s, e, ZOOM if zoomed else 1.0))
 LOOP = sh.get('loop', G.get('loop', False))
 if LOOP and plan:   # endless video: the last frame must look like the first one
