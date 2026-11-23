@@ -136,6 +136,11 @@ on every cut. All bundled sounds/music/LUTs are synthesised by `gen_sfx.py` / `g
   matched to the surrounding skin tone (it must never look pale). The owner dislikes heavy/plastic smoothing.
 - Loudness −14 LUFS.
 **Covers (1080×1920)**
+- CURRENT STYLE (Nov 23 2026): `scripts/cover_dyn.py`, layout `behind` + `"front": true` — two giant words on top
+  (2nd one red), short white line at the bottom, text IN FRONT of the speaker (not behind the head),
+  `"retouch": "still"` (organic frequency-separation retouch, also in low light).
+- SAFE ZONE: the channel grid crops covers to ~2:3–3:4 (≈240 px top & bottom cut). All text within y 260..1660;
+  always check a 3:4 centre-crop preview before sending (owner: top line was cut off).
 - Plain natural frame (with the same retouch) + title. NO colour grading, NO purple look, NO cut-out/outline,
   NO emoji. Soft dark fade at the bottom only.
 - Title: sentence case, Inter SemiBold ~130 px, white, 2–3 short lines bottom-left (≤13 chars per line so all

@@ -7,7 +7,9 @@ Layouts (c["layout"]):
   zoom    — radial zoom blur background, sharp speaker, text top, key word fades out (something vanishes)
   speed   — horizontal motion-blur background + speed streaks, tilted text, key word on a red block (race)
   behind  — giant words BEHIND the head (speaker cut out in front), small line at the bottom;
-            "front": true = the same, but the words are in front (owner prefers this, Nov 2026)
+            "front": true = the same, but the words are in front (owner prefers this, Nov 2026).
+            SAFE ZONE: the channel grid crops covers to ~2:3/3:4 (≈240 px top and bottom) — keep all text in
+            y 260..1660 (big_y≈480, head_top≈660, y≈1450). Check with a 3:4 centre-crop preview.
 Common keys: src, t, cx, zoom, prefilter (same as the short), retouch (null = none, "still" = organic
 frequency-separation retouch, works in low light — owner wants it on covers), out, lines, size, y, tilt.
 lines: [[["ТЫ В", 0], ["ГОНКЕ", 2]], ...]  0 white, 1 red, 2 white on red block, 3 red fading out.
@@ -193,8 +195,12 @@ def make(c):
         top = int(rows[0]) if len(rows) else 440
         d = max(0, c.get('head_top', 440) - top)          # move the frame down so the giant words stay readable
         if d:                                              # the strip that appears on top: reflected + blurred sky
-            bgr = cv2.copyMakeBorder(bgr, d, 0, 0, 0, cv2.BORDER_REFLECT)[:H]
-            bgr[:d + 40] = cv2.GaussianBlur(bgr[:d + 40], (0, 0), 25)
+            bgr = cv2.copyMakeBorder(bgr, d, 0, 0, 0, cv2.BORDER_REPLICATE)[:H]   # (reflect mirrored the head)
+            n = d + 80; strip = cv2.GaussianBlur(bgr[:n], (0, 0), 40).astype(np.float32)
+            g = np.clip(np.arange(n, dtype=np.float32) / n, 0, 1)[:, None, None]
+            strip *= 0.45 + 0.55 * g                                               # darker towards the top
+            a = np.clip((np.arange(n) - d) / 80, 0, 1)[:, None, None]                # blend into the real frame
+            bgr[:n] = (strip * (1 - a) + bgr[:n] * a).astype(np.uint8)
             m = np.concatenate([np.zeros((d, W), np.float32), m])[:H]
             rgb = to_pil(bgr)
         person = rgb.copy(); person.putalpha(Image.fromarray((m * 255).astype(np.uint8)))
