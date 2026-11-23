@@ -265,7 +265,7 @@ def render():
         acc += e - s
         n = round(acc * FPS) - written
         rd = subprocess.Popen(['ffmpeg', '-v', 'error', '-ss', f'{s:.3f}', '-t', f'{e - s:.3f}', '-i', SRC, '-an', '-frames:v', str(n),
-            '-vf', f'fps={FPS},crop={cw}:{SRC_H}:{bx}:0,scale=in_color_matrix=bt709:in_range=tv', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-'], stdout=subprocess.PIPE)
+            '-vf', (G['prefilter'] + ',' if G.get('prefilter') else '') + f'fps={FPS},crop={cw}:{SRC_H}:{bx}:0,scale=in_color_matrix=bt709:in_range=tv', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-'], stdout=subprocess.PIPE)
         zx, zy, zw, zh = zoom_box(z)
         rt.pgray = None   # no optical flow across a jump cut
         last = None
