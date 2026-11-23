@@ -145,7 +145,15 @@ def make(c):
         img = bottom_fade(bg, 0.5, 0.75)
         put_text(img, c, 1450)
     elif lay == 'behind':
-        person = cutout(bgr, rgb)
+        m = matte(bgr); rows = np.where((m > 0.5).sum(1) > 40)[0]
+        top = int(rows[0]) if len(rows) else 440
+        d = max(0, c.get('head_top', 440) - top)          # move the frame down so the giant words stay readable
+        if d:                                              # the strip that appears on top: reflected + blurred sky
+            bgr = cv2.copyMakeBorder(bgr, d, 0, 0, 0, cv2.BORDER_REFLECT)[:H]
+            bgr[:d + 40] = cv2.GaussianBlur(bgr[:d + 40], (0, 0), 25)
+            m = np.concatenate([np.zeros((d, W), np.float32), m])[:H]
+            rgb = to_pil(bgr)
+        person = rgb.copy(); person.putalpha(Image.fromarray((m * 255).astype(np.uint8)))
         img = bottom_fade(ImageEnhance.Brightness(rgb).enhance(0.85), 0.5, 0.75)
         big, _ = text_layer(c['big'], c.get('big_size', 260), maxw=W - 60, tilt=c.get('big_tilt', 0))
         img.alpha_composite(big, (-200, int(c.get('big_y', 420) - big.height / 2)))
