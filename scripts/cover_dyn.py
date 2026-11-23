@@ -6,7 +6,8 @@ Layouts (c["layout"]):
   ghost   — semi-transparent shifted copies of the speaker behind him (other people / influence)
   zoom    — radial zoom blur background, sharp speaker, text top, key word fades out (something vanishes)
   speed   — horizontal motion-blur background + speed streaks, tilted text, key word on a red block (race)
-  behind  — giant words BEHIND the head (speaker cut out in front), small line at the bottom
+  behind  — giant words BEHIND the head (speaker cut out in front), small line at the bottom;
+            "front": true = the same, but the words are in front (owner prefers this, Nov 2026)
 Common keys: src, t, cx, zoom, prefilter (same as the short), retouch (null = none), out, lines, size, y, tilt.
 lines: [[["ТЫ В", 0], ["ГОНКЕ", 2]], ...]  0 white, 1 red, 2 white on red block, 3 red fading out.
 Usage: cover_dyn.py covers.json"""
@@ -156,8 +157,11 @@ def make(c):
         person = rgb.copy(); person.putalpha(Image.fromarray((m * 255).astype(np.uint8)))
         img = bottom_fade(ImageEnhance.Brightness(rgb).enhance(0.85), 0.5, 0.75)
         big, _ = text_layer(c['big'], c.get('big_size', 260), maxw=W - 60, tilt=c.get('big_tilt', 0))
-        img.alpha_composite(big, (-200, int(c.get('big_y', 420) - big.height / 2)))
-        img.alpha_composite(person)
+        pos = (-200, int(c.get('big_y', 420) - big.height / 2))
+        if c.get('front'):                                 # «top»: same layout, words in FRONT of the speaker
+            img.alpha_composite(person); img.alpha_composite(big, pos)
+        else:
+            img.alpha_composite(big, pos); img.alpha_composite(person)
         img = bottom_fade(img, 0.62, 0.55)
         put_text(img, c, 1560)
     img.convert('RGB').save(c['out'], quality=95); print('ok', c['out'])
