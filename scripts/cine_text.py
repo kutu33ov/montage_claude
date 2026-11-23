@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 W, H = 1080, 1920
 FONT = '/usr/share/fonts/opentype/inter/Inter-Medium.otf'
 c = json.load(open(sys.argv[1]))
+SHB, SHW = (14, 4) if c.get('shadow') == 'strong' else (7, 0)   # "shadow": "strong" = clearly visible shadows
 FPS, DUR = c.get('fps', 60), c.get('dur', 12.0)
 N = int(FPS * DUR); K = c.get('look', 1.0)
 
@@ -53,13 +54,17 @@ def text_frames(text, size, maxw=900):
     for i, ln in enumerate(lines):
         lw = d.textlength(' '.join(ln), font=f); x = (W - lw) / 2
         for w in ln:
-            ww = int(d.textlength(w, font=f)) + 40
-            im = Image.new('RGBA', (ww, lh + 40), (0, 0, 0, 0))
+            ww = int(d.textlength(w, font=f)) + 80
+            im = Image.new('RGBA', (ww, lh + 80), (0, 0, 0, 0))
             sh = Image.new('RGBA', im.size, (0, 0, 0, 0))
-            ImageDraw.Draw(sh).text((20, 20), w, font=f, fill=(0, 0, 0, 200))
-            im.alpha_composite(sh.filter(ImageFilter.GaussianBlur(7)))
-            ImageDraw.Draw(im).text((20, 20), w, font=f, fill=(255, 250, 242, 255))
-            out.append((im, x - 20, top + i * lh - 20))
+            ImageDraw.Draw(sh).text((40, 42), w, font=f, fill=(0, 0, 0, 255), stroke_width=SHW, stroke_fill=(0, 0, 0, 255))
+            im.alpha_composite(sh.filter(ImageFilter.GaussianBlur(SHB)))          # wide soft shadow
+            if SHB > 8:                                                          # + tight contact shadow
+                sh2 = Image.new('RGBA', im.size, (0, 0, 0, 0))
+                ImageDraw.Draw(sh2).text((41, 43), w, font=f, fill=(0, 0, 0, 200))
+                im.alpha_composite(sh2.filter(ImageFilter.GaussianBlur(2.5)))
+            ImageDraw.Draw(im).text((40, 40), w, font=f, fill=(255, 250, 242, 255))
+            out.append((im, x - 40, top + i * lh - 40))
             x += d.textlength(w, font=f) + sp
     return out
 
@@ -79,7 +84,7 @@ else:
 texts = [dict(t, words=text_frames(t['text'], c.get('size', 60))) for t in c['texts']]
 YC = c.get('y', 360)
 enc = subprocess.Popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{W}x{H}', '-r', str(FPS), '-i', '-',
-                        *(['-i', c['src'], '-map', '0:v', '-map', '1:a?'] if is_video else
+                        *(['-i', c['src'], '-map', '0:v', '-map', '1:a:0?'] if is_video else
                           ['-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo', '-map', '0:v', '-map', '1:a']),
                         '-c:v', 'libx264', '-preset', 'slow', '-crf', '16', '-pix_fmt', 'yuv420p',
                         '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709',
