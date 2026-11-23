@@ -8,7 +8,8 @@ Layouts (c["layout"]):
   speed   — horizontal motion-blur background + speed streaks, tilted text, key word on a red block (race)
   behind  — giant words BEHIND the head (speaker cut out in front), small line at the bottom;
             "front": true = the same, but the words are in front (owner prefers this, Nov 2026)
-Common keys: src, t, cx, zoom, prefilter (same as the short), retouch (null = none), out, lines, size, y, tilt.
+Common keys: src, t, cx, zoom, prefilter (same as the short), retouch (null = none, "still" = organic
+frequency-separation retouch, works in low light — owner wants it on covers), out, lines, size, y, tilt.
 lines: [[["ТЫ В", 0], ["ГОНКЕ", 2]], ...]  0 white, 1 red, 2 white on red block, 3 red fading out.
 Usage: cover_dyn.py covers.json"""
 import json, os, subprocess, sys, random
@@ -28,7 +29,9 @@ def grab(c):
     raw = subprocess.run(['ffmpeg', '-v', 'error', '-ss', f'{t:.2f}', '-i', src, '-map', '0:v:0', '-frames:v', '1', '-vf', vf,
                           '-f', 'image2pipe', '-vcodec', 'png', '-'], capture_output=True).stdout
     im = cv2.imdecode(np.frombuffer(raw, np.uint8), 1)
-    if c.get('retouch'): im = skin.Retoucher(c['retouch'])(im)
+    rt = c.get('retouch')
+    if rt == 'still' or isinstance(rt, (int, float)) and rt: im = still_retouch(im, 1.0 if rt == 'still' else rt)
+    elif rt: im = skin.Retoucher(rt)(im)
     z = c.get('zoom', 1.0)
     if z > 1:
         b, _ = skin.yunet_detect(im)
@@ -37,6 +40,46 @@ def grab(c):
         x0 = int(min(max(fx - w2 / 2, 0), cw - w2)); y0 = int(min(max(fy - h2 * 0.36, 0), sh - h2))
         im = im[y0:y0 + h2, x0:x0 + w2]
     return cv2.resize(im, (W, H), interpolation=cv2.INTER_LANCZOS4)
+
+def still_retouch(img, k=1.0):
+    """Organic retouch for a single cover frame (works in low light too, thresholds are relative to the face):
+    frequency separation — only the LOW frequencies of the skin are evened out (blotches, redness), the pores /
+    stubble texture (high frequencies) stay untouched, so the skin never looks plastic. Then redness pulled to
+    the face's own median tone and small red spots removed. Eyes, brows, lips and beard are excluded."""
+    b, lm = skin.yunet_detect(img)
+    if b is None: return img
+    x, y, w, h = b; H_, W_ = img.shape[:2]
+    ycc = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb).astype(np.float32)
+    # face ellipse
+    fe = np.zeros((H_, W_), np.float32)
+    cv2.ellipse(fe, (int(x + w / 2), int(y + h * 0.48)), (int(w * 0.5), int(h * 0.64)), 0, 0, 360, 1, -1)
+    fb = ycc[fe > 0]; med = np.median(fb[fb[:, 0] > np.percentile(fb[:, 0], 40)], 0)       # bright part = skin
+    Y, Cr, Cb = ycc[..., 0], ycc[..., 1], ycc[..., 2]
+    sk = fe * (np.abs(Cr - med[1]) < 16) * (np.abs(Cb - med[2]) < 14) * (Y > med[0] - 45)
+    for e in (lm[0], lm[1]):                                                              # eyes + brows
+        cv2.ellipse(sk, (int(e[0]), int(e[1] - w * 0.04)), (int(w * 0.16), int(w * 0.12)), 0, 0, 360, 0, -1)
+    mc = (lm[3] + lm[4]) / 2; mw = np.linalg.norm(lm[4] - lm[3])
+    cv2.ellipse(sk, (int(mc[0]), int(mc[1])), (int(mw * 0.75), int(w * 0.11)), 0, 0, 360, 0, -1)  # lips
+    sk = cv2.morphologyEx(sk.astype(np.uint8), cv2.MORPH_OPEN, np.ones((5, 5), np.uint8)).astype(np.float32)
+    m = cv2.GaussianBlur(sk, (0, 0), w * 0.025) * k
+    # frequency separation on Y/Cr/Cb
+    s1 = max(w * 0.012, 2); s2 = w * 0.045
+    low = cv2.GaussianBlur(ycc, (0, 0), s1); high = ycc - low
+    low2 = cv2.GaussianBlur(ycc, (0, 0), s2)
+    even = low * 0.45 + low2 * 0.55                       # blotches evened, shape/shading mostly kept
+    out = ycc.copy()
+    out = out * (1 - m[..., None]) + (even + high) * m[..., None]
+    # redness: pull Cr excess above the face median back (70 %), keep the warmth
+    ex = np.clip(out[..., 1] - (med[1] + 1.5), 0, None)
+    out[..., 1] -= ex * 0.7 * m
+    # small red spots: Cr local peaks
+    crl = cv2.GaussianBlur(out[..., 1], (0, 0), w * 0.02)
+    spot = np.clip((out[..., 1] - crl - 2.0) / 3.0, 0, 1) * sk
+    spot = cv2.GaussianBlur(cv2.dilate(spot, np.ones((5, 5), np.uint8)), (0, 0), 2) * k
+    bl = cv2.GaussianBlur(out, (0, 0), w * 0.02)
+    out[..., 1] = out[..., 1] * (1 - spot) + bl[..., 1] * spot
+    out[..., 0] = out[..., 0] * (1 - spot * 0.6) + np.maximum(bl[..., 0], out[..., 0]) * spot * 0.6
+    return cv2.cvtColor(np.clip(out, 0, 255).astype(np.uint8), cv2.COLOR_YCrCb2BGR)
 
 def to_pil(bgr): return Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)).convert('RGBA')
 
