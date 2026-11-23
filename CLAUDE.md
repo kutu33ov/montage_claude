@@ -137,7 +137,8 @@ on every cut. All bundled sounds/music/LUTs are synthesised by `gen_sfx.py` / `g
 - Loudness −14 LUFS.
 **Covers (1080×1920)**
 - CURRENT STYLE (Nov 23 2026): `scripts/cover_dyn.py`, layout `behind` + `"front": true` — two giant words on top
-  (2nd one red), short white line at the bottom, text IN FRONT of the speaker (not behind the head),
+  (2nd one red), short white line at the bottom, text IN FRONT of the speaker (not behind the head) but SMALL
+  and never over the face (big_size 140, size 95, big_y 420, head_top 600, y 1570),
   `"retouch": "still"` (organic frequency-separation retouch, also in low light).
 - SAFE ZONE: the channel grid crops covers to ~2:3–3:4 (≈240 px top & bottom cut). All text within y 260..1660;
   always check a 3:4 centre-crop preview before sending (owner: top line was cut off).
