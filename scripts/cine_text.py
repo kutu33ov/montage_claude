@@ -13,7 +13,13 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 W, H = 1080, 1920
 FONT = '/usr/share/fonts/opentype/inter/Inter-Medium.otf'
 c = json.load(open(sys.argv[1]))
-SHB, SHW = (14, 4) if c.get('shadow') == 'strong' else (7, 0)   # "shadow": "strong" = clearly visible shadows
+if c.get('native') and c['src'].lower().endswith(('.mp4', '.mov', '.mkv', '.m4v')):   # keep the source resolution
+    _wh = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height',
+                          '-of', 'csv=p=0', c['src']], capture_output=True, text=True).stdout.split(',')
+    W, H = int(_wh[0]) // 2 * 2, int(_wh[1]) // 2 * 2
+SC = W / 1080                                   # sizes in the config are given for 1080 wide
+SHB, SHW = (14, 4) if c.get('shadow') == 'strong' else (7, 0)
+SHB, SHW = SHB * W / 1080, int(SHW * W / 1080)   # "shadow": "strong" = clearly visible shadows
 FPS, DUR = c.get('fps', 60), c.get('dur', 12.0)
 N = int(FPS * DUR); K = c.get('look', 1.0)
 
@@ -22,8 +28,9 @@ def grade(rgb, k=K):
     L = rgb @ np.float32([0.2126, 0.7152, 0.0722])
     # bloom / halation on bright lights (warm)
     hi = np.clip((L - 0.72) / 0.28, 0, 1)[..., None] * rgb
-    bloom = cv2.GaussianBlur(hi, (0, 0), 22) * np.float32([1.0, 0.82, 0.62])
-    x = rgb + bloom * 0.22 * k
+    sm = cv2.resize(hi, (hi.shape[1] // 4, hi.shape[0] // 4), interpolation=cv2.INTER_AREA)
+    bloom = cv2.resize(cv2.GaussianBlur(sm, (0, 0), 22 * hi.shape[1] / 1080 / 4), (hi.shape[1], hi.shape[0])) * np.float32([1.0, 0.82, 0.62])
+    x = rgb + bloom * c.get('bloom', 0.22) * k
     # gentle S-curve + lifted blacks, slightly soft whites
     x = np.clip(x, 0, 1)
     s = x + 0.06 * k * (x - 0.5) * (1 - np.abs(2 * x - 1))
@@ -41,6 +48,7 @@ def grade(rgb, k=K):
     return np.clip(x, 0, 1)
 
 def text_frames(text, size, maxw=900):
+    size = int(size * SC); maxw = int(maxw * SC)
     """layout words in centred lines; returns list of (word image RGBA, x, y)"""
     f = ImageFont.truetype(FONT, size); d = ImageDraw.Draw(Image.new('RGBA', (8, 8)))
     words, lines, cur = text.split(), [], []
@@ -82,11 +90,11 @@ else:
                             '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], stdout=subprocess.PIPE)
 
 texts = [dict(t, words=text_frames(t['text'], c.get('size', 60))) for t in c['texts']]
-YC = c.get('y', 360)
+YC = c.get('y', 360) * SC
 enc = subprocess.Popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{W}x{H}', '-r', str(FPS), '-i', '-',
                         *(['-i', c['src'], '-map', '0:v', '-map', '1:a:0?'] if is_video else
                           ['-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo', '-map', '0:v', '-map', '1:a']),
-                        '-c:v', 'libx264', '-preset', 'slow', '-crf', '16', '-pix_fmt', 'yuv420p',
+                        '-c:v', 'libx264', '-preset', 'slow', '-crf', str(c.get('crf', 16)), '-pix_fmt', 'yuv420p',
                         '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709',
                         '-c:a', 'aac', '-b:a', '192k', '-t', f'{DUR}', '-movflags', '+faststart', c['out']], stdin=subprocess.PIPE)
 rng = np.random.default_rng(1)
@@ -102,8 +110,8 @@ for i in range(N):
         b = dec.stdout.read(W * H * 3)
         if len(b) < W * H * 3: break
         fr = grade(np.frombuffer(b, np.uint8).reshape(H, W, 3).astype(np.float32) / 255)
-    g = rng.normal(0, 0.016 * K, (H // 2, W // 2)).astype(np.float32)              # fine grain
-    fr = np.clip(fr + cv2.resize(g, (W, H))[..., None], 0, 1)
+    if c.get('grain', 0.016):                                                    # fine, pixel-level grain
+        fr = np.clip(fr + rng.normal(0, c.get('grain', 0.016) * K, (H, W, 1)).astype(np.float32), 0, 1)
     img = Image.fromarray((fr * 255).astype(np.uint8)).convert('RGBA')
     for tx in texts:
         a0, a1 = tx['at'], tx.get('until', DUR + 1)
@@ -115,8 +123,8 @@ for i in range(N):
             al = p * out_a
             if al <= 0: continue
             w = im.copy(); w.putalpha(w.split()[3].point(lambda v: int(v * al)))
-            if p < 1: w = w.filter(ImageFilter.GaussianBlur(float((1 - p) * 4)))
-            img.alpha_composite(w, (int(x), int(YC + y + (1 - p) * 14)))
+            if p < 1: w = w.filter(ImageFilter.GaussianBlur(float((1 - p) * 4 * SC)))
+            img.alpha_composite(w, (int(x), int(YC + y + (1 - p) * 14 * SC)))
     enc.stdin.write(np.asarray(img.convert('RGB')).tobytes())
 enc.stdin.close(); enc.wait()
 print('ok', c['out'])
