@@ -98,7 +98,8 @@ Per short in config.json (anchor by `"word"`, source time `"at"` or output time 
   с вопроса, рассчитанного на то, чтобы тебя зацепить» → start «Ты заметил, что интернет…»).
 - `prefilter` — ffmpeg filter chain applied to the source first. Low-light / evening footage (owner liked it):
   `hqdn3d=5:4:8:6,curves=all='0/0 0.08/0.12 0.25/0.36 0.6/0.72 1/1',eq=saturation=1.06,unsharp=5:5:0.45`
-  (denoise + lift shadows/mids, blacks stay black — plain gamma made a grey veil); no tone evening then.
+  (denoise + lift shadows/mids, blacks stay black — plain gamma made a grey veil). In low light the nose retouch
+  does NOT work (owner) — set `"skin": false` (no retouch at all) for evening/night footage.
 - `fx.progress_bar`, `fx.watermark` ("@nick") — off by default.
 - `terms` — list of terms (global or per short) coloured light red (`term_color`, default FF6B6B) in the captions;
   word forms match by stem, multi-word terms colour every word. The owner wants terms highlighted.
